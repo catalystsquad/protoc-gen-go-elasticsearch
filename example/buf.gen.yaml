@@ -1,0 +1,15 @@
+version: v1
+plugins:
+  - plugin: buf.build/protocolbuffers/go:v1.28.1
+    out: .
+    opt:
+    - paths=source_relative
+  - name: go-elasticsearch
+    out: .
+    opt:
+      - paths=source_relative
+  - name: go-json
+    out: .
+    opt:
+      - paths=source_relative
+      - allow_unknown=true

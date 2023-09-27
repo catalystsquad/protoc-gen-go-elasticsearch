@@ -1,2 +1,2 @@
 # protoc-gen-go-elasticsearch
-Protoc generator for elasticsearch
+Protoc plugin to generate golang elasticsearch model objects
