@@ -40,6 +40,8 @@ var templateFuncs = map[string]any{
 	"isNumeric":        isNumeric,
 	"isBoolean":        isBoolean,
 	"isTimestamp":      isTimestamp,
+	"isStructPb":       isStructPb,
+	"isEnum":           isEnum,
 	"isBytes":          isBytes,
 	"maybeDereference": maybeDereference,
 	"isReference":      isReference,
@@ -243,6 +245,14 @@ func isBoolean(field *protogen.Field) bool {
 
 func isTimestamp(field *protogen.Field) bool {
 	return field.Desc.Message() != nil && field.Desc.Message().FullName() == "google.protobuf.Timestamp"
+}
+
+func isStructPb(field *protogen.Field) bool {
+	return field.Desc.Message() != nil && field.Desc.Message().FullName() == "google.protobuf.Struct"
+}
+
+func isEnum(field *protogen.Field) bool {
+	return field.Desc.Message() != nil && field.Desc.Message().FullName() == "google.protobuf.Struct"
 }
 
 func isBytes(field *protogen.Field) bool {

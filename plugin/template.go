@@ -157,13 +157,16 @@ func (s *{{ .Desc.Name }}) ToEsDocument() (Document, error) {
 		Metadata: []Metadata{},
 	}
 	{{ range .Fields }}
-	{{ if and (includeField .) (not (isBytes .)) }}
-	{{ if isReference .}}
-    {{ else }}
+	{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) }}
+	{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
+    if s.{{ .GoName}} != nil {
+    {{ end }}
 	{{ .GoName}}MetaData := Metadata{
 		Key: lo.ToPtr("{{ .Desc.JSONName }}"),
+        {{ if eq (isTimestamp .) false }}
         StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
         KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+        {{ end }}
 	}
     {{ if isNumeric . }}
 	{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
@@ -172,8 +175,12 @@ func (s *{{ .Desc.Name }}) ToEsDocument() (Document, error) {
 	{{ .GoName}}MetaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
     {{ else if isTimestamp . }}
 	{{ .GoName}}MetaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
+    {{ else if .Enum }}
+	{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
     {{ end }}
 	doc.Metadata = append(doc.Metadata, {{ .GoName}}MetaData)
+    {{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
+	}
     {{ end }}
 	{{ end }}
 	{{ end }}

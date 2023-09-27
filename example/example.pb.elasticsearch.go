@@ -167,16 +167,22 @@ func (s *Thing) ToEsDocument() (Document, error) {
 		Metadata: []Metadata{},
 	}
 
-	IdMetaData := Metadata{
-		Key:          lo.ToPtr("id"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+	if s.Id != nil {
+
+		IdMetaData := Metadata{
+			Key: lo.ToPtr("id"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+		}
+
+		doc.Metadata = append(doc.Metadata, IdMetaData)
+
 	}
 
-	doc.Metadata = append(doc.Metadata, IdMetaData)
-
 	ADoubleMetaData := Metadata{
-		Key:          lo.ToPtr("aDouble"),
+		Key: lo.ToPtr("aDouble"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
 	}
@@ -187,7 +193,8 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, ADoubleMetaData)
 
 	AFloatMetaData := Metadata{
-		Key:          lo.ToPtr("aFloat"),
+		Key: lo.ToPtr("aFloat"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
 	}
@@ -198,7 +205,8 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AFloatMetaData)
 
 	AnInt32MetaData := Metadata{
-		Key:          lo.ToPtr("anInt32"),
+		Key: lo.ToPtr("anInt32"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
 	}
@@ -209,7 +217,8 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt32MetaData)
 
 	AnInt64MetaData := Metadata{
-		Key:          lo.ToPtr("anInt64"),
+		Key: lo.ToPtr("anInt64"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
 	}
@@ -220,7 +229,8 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt64MetaData)
 
 	ABoolMetaData := Metadata{
-		Key:          lo.ToPtr("aBool"),
+		Key: lo.ToPtr("aBool"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
 	}
@@ -230,7 +240,8 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, ABoolMetaData)
 
 	AStringMetaData := Metadata{
-		Key:          lo.ToPtr("aString"),
+		Key: lo.ToPtr("aString"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AString)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AString)),
 	}
@@ -238,75 +249,112 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AStringMetaData)
 
 	RepeatedScalarFieldMetaData := Metadata{
-		Key:          lo.ToPtr("repeatedScalarField"),
+		Key: lo.ToPtr("repeatedScalarField"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.RepeatedScalarField)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.RepeatedScalarField)),
 	}
 
 	doc.Metadata = append(doc.Metadata, RepeatedScalarFieldMetaData)
 
-	OptionalScalarFieldMetaData := Metadata{
-		Key:          lo.ToPtr("optionalScalarField"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
+	if s.OptionalScalarField != nil {
+
+		OptionalScalarFieldMetaData := Metadata{
+			Key: lo.ToPtr("optionalScalarField"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
+		}
+
+		doc.Metadata = append(doc.Metadata, OptionalScalarFieldMetaData)
+
 	}
 
-	doc.Metadata = append(doc.Metadata, OptionalScalarFieldMetaData)
+	if s.AssociatedThing != nil {
+
+		AssociatedThingMetaData := Metadata{
+			Key: lo.ToPtr("associatedThing"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AssociatedThing)),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AssociatedThing)),
+		}
+
+		doc.Metadata = append(doc.Metadata, AssociatedThingMetaData)
+
+	}
+
+	if s.OptionalAssociatedThing != nil {
+
+		OptionalAssociatedThingMetaData := Metadata{
+			Key: lo.ToPtr("optionalAssociatedThing"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalAssociatedThing))),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalAssociatedThing))),
+		}
+
+		doc.Metadata = append(doc.Metadata, OptionalAssociatedThingMetaData)
+
+	}
+
+	if s.RepeatedMessages != nil {
+
+		RepeatedMessagesMetaData := Metadata{
+			Key: lo.ToPtr("repeatedMessages"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.RepeatedMessages)),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.RepeatedMessages)),
+		}
+
+		doc.Metadata = append(doc.Metadata, RepeatedMessagesMetaData)
+
+	}
 
 	ATimestampMetaData := Metadata{
-		Key:          lo.ToPtr("aTimestamp"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ATimestamp)),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ATimestamp)),
+		Key: lo.ToPtr("aTimestamp"),
 	}
 
 	ATimestampMetaData.DateValue = lo.ToPtr(s.ATimestamp.AsTime().UTC().UnixMilli())
 
 	doc.Metadata = append(doc.Metadata, ATimestampMetaData)
 
-	AnIgnoredFieldMetaData := Metadata{
-		Key:          lo.ToPtr("anIgnoredField"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnIgnoredField)),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnIgnoredField)),
-	}
-
-	doc.Metadata = append(doc.Metadata, AnIgnoredFieldMetaData)
-
-	AStructFieldMetaData := Metadata{
-		Key:          lo.ToPtr("aStructField"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AStructField)),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AStructField)),
-	}
-
-	doc.Metadata = append(doc.Metadata, AStructFieldMetaData)
-
 	AnEnumMetaData := Metadata{
-		Key:          lo.ToPtr("anEnum"),
+		Key: lo.ToPtr("anEnum"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
 	}
 
+	AnEnumMetaData.LongValue = lo.ToPtr(int64(s.AnEnum.Number()))
+
 	doc.Metadata = append(doc.Metadata, AnEnumMetaData)
 
-	AnOptionalIntMetaData := Metadata{
-		Key:          lo.ToPtr("anOptionalInt"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
+	if s.AnOptionalInt != nil {
+
+		AnOptionalIntMetaData := Metadata{
+			Key: lo.ToPtr("anOptionalInt"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
+		}
+
+		AnOptionalIntMetaData.LongValue = lo.ToPtr(int64(lo.FromPtr(s.AnOptionalInt)))
+		AnOptionalIntMetaData.DoubleValue = lo.ToPtr(float64(lo.FromPtr(s.AnOptionalInt)))
+
+		doc.Metadata = append(doc.Metadata, AnOptionalIntMetaData)
+
 	}
 
-	AnOptionalIntMetaData.LongValue = lo.ToPtr(int64(lo.FromPtr(s.AnOptionalInt)))
-	AnOptionalIntMetaData.DoubleValue = lo.ToPtr(float64(lo.FromPtr(s.AnOptionalInt)))
+	if s.OptionalTimestamp != nil {
 
-	doc.Metadata = append(doc.Metadata, AnOptionalIntMetaData)
+		OptionalTimestampMetaData := Metadata{
+			Key: lo.ToPtr("optionalTimestamp"),
+		}
 
-	OptionalTimestampMetaData := Metadata{
-		Key:          lo.ToPtr("optionalTimestamp"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalTimestamp))),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalTimestamp))),
+		OptionalTimestampMetaData.DateValue = lo.ToPtr(s.OptionalTimestamp.AsTime().UTC().UnixMilli())
+
+		doc.Metadata = append(doc.Metadata, OptionalTimestampMetaData)
+
 	}
-
-	OptionalTimestampMetaData.DateValue = lo.ToPtr(s.OptionalTimestamp.AsTime().UTC().UnixMilli())
-
-	doc.Metadata = append(doc.Metadata, OptionalTimestampMetaData)
 
 	return doc, nil
 }
@@ -326,16 +374,22 @@ func (s *Thing2) ToEsDocument() (Document, error) {
 		Metadata: []Metadata{},
 	}
 
-	IdMetaData := Metadata{
-		Key:          lo.ToPtr("id"),
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+	if s.Id != nil {
+
+		IdMetaData := Metadata{
+			Key: lo.ToPtr("id"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
+		}
+
+		doc.Metadata = append(doc.Metadata, IdMetaData)
+
 	}
 
-	doc.Metadata = append(doc.Metadata, IdMetaData)
-
 	NameMetaData := Metadata{
-		Key:          lo.ToPtr("name"),
+		Key: lo.ToPtr("name"),
+
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.Name)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.Name)),
 	}

@@ -40,6 +40,13 @@ func (s *PluginSuite) TestSearchById() {
 	s.eventualKeywordSearch("thing", "id", *thing.Id, *thing.Id)
 }
 
+func (s *PluginSuite) TestSearchEnum() {
+	thing := s.generateRandomThing()
+	s.indexThing(thing)
+	s.eventualKeywordSearch("thing", "anEnum", thing.AnEnum.String(), *thing.Id)
+	s.eventualLongSearch("thing", "anEnum", *thing.Id, int(thing.AnEnum.Number()))
+}
+
 func (s *PluginSuite) TestSearchStringValue() {
 	thing := s.generateRandomThing()
 	thing.AString = "i like turtles and elephants because they're neat"
