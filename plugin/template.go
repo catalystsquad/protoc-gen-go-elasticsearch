@@ -21,7 +21,7 @@ type Metadata struct {
 
 {{ range .messages }}
 {{- if includeMessage . }}
-const {{ .Desc.Name}}EsType = "{{ .Desc.Name | toString | toLower }}"
+const {{ .Desc.Name}}EsType = "{{ .Desc.Name }}"
 {{- end -}}
 {{ end }}
 
@@ -150,7 +150,8 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 
 {{ range .messages }}
 {{ if includeMessage . }}
-func (s *{{ .Desc.Name }}) ToEsDocument() (Document, error) {
+func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
+	docs := []Document{}
 	doc := Document{
 		Id:       *s.Id,
 		Type:     {{ .Desc.Name}}EsType,
@@ -161,8 +162,65 @@ func (s *{{ .Desc.Name }}) ToEsDocument() (Document, error) {
 	{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
     if s.{{ .GoName}} != nil {
     {{ end }}
+	{{ if isRelationship . }}
+	{{ if .Desc.IsList }}
+	for _, message := range s.{{ .GoName }} {
+		{{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc := Document {
+		Type: "{{ .Parent.GoIdent.GoName }}{{ .GoName }}",
+		Metadata: []Metadata{
+			{
+				Key: lo.ToPtr("{{ .Parent.GoIdent.GoName }}Id"),
+                KeywordValue: s.Id,
+			},
+			{
+				Key: lo.ToPtr("{{ .Message.GoIdent.GoName }}Id"),
+                KeywordValue: message.Id,
+			},
+		},
+	}
+	docs = append(docs, {{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc)
+	}
+	{{ else }}
+	{{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc := Document {
+		Type: "{{ .Parent.GoIdent.GoName }}{{ .GoName }}",
+		Metadata: []Metadata{
+			{
+				Key: lo.ToPtr("{{ .Parent.GoIdent.GoName }}Id"),
+                KeywordValue: s.Id,
+			},
+			{
+				Key: lo.ToPtr("{{ .Message.GoIdent.GoName }}Id"),
+                KeywordValue: s.{{ .GoName }}.Id,
+			},
+		},
+	}
+	docs = append(docs, {{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc)
+	{{ end }}
+	{{ else }}
+	{{ if .Desc.IsList }}
+	for _, val := range s.{{ .GoName }} {
+		metaData := Metadata{
+		Key: lo.ToPtr("{{ .GoName }}"),
+        {{ if eq (isTimestamp .) false }}
+        StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+        KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+        {{ end }}
+		}
+		{{ if isNumeric . }}
+		metaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
+		metaData.DoubleValue = lo.ToPtr(float64({{ fieldValueString . }}))
+		{{ else if isBoolean . }}
+		metaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
+		{{ else if isTimestamp . }}
+		metaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
+		{{ else if .Enum }}
+		metaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
+		{{ end }}
+		doc.Metadata = append(doc.Metadata, metaData)
+	}
+	{{ else }}
 	{{ .GoName}}MetaData := Metadata{
-		Key: lo.ToPtr("{{ .Desc.JSONName }}"),
+		Key: lo.ToPtr("{{ .GoName }}"),
         {{ if eq (isTimestamp .) false }}
         StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
         KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
@@ -179,20 +237,23 @@ func (s *{{ .Desc.Name }}) ToEsDocument() (Document, error) {
 	{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
     {{ end }}
 	doc.Metadata = append(doc.Metadata, {{ .GoName}}MetaData)
+	{{ end }}
+    {{ end }}
     {{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
 	}
     {{ end }}
 	{{ end }}
 	{{ end }}
-	return doc, nil
+	docs = append(docs, doc)
+	return docs, nil
 }
 
 func (s *{{ .Desc.Name }}) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	doc, err := s.ToEsDocument()
+	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
-	return QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 {{ end }}
 {{ end }}

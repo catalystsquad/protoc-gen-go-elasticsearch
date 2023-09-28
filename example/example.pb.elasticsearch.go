@@ -33,8 +33,8 @@ type Metadata struct {
 	BoolValue    *bool    `json:"boolValue,omitempty"`
 }
 
-const ThingEsType = "thing"
-const Thing2EsType = "thing2"
+const ThingEsType = "Thing"
+const Thing2EsType = "Thing2"
 
 const indexName = "data"
 
@@ -160,7 +160,8 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 	return err
 }
 
-func (s *Thing) ToEsDocument() (Document, error) {
+func (s *Thing) ToEsDocuments() ([]Document, error) {
+	docs := []Document{}
 	doc := Document{
 		Id:       *s.Id,
 		Type:     ThingEsType,
@@ -170,7 +171,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	if s.Id != nil {
 
 		IdMetaData := Metadata{
-			Key: lo.ToPtr("id"),
+			Key: lo.ToPtr("Id"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
@@ -181,7 +182,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	}
 
 	ADoubleMetaData := Metadata{
-		Key: lo.ToPtr("aDouble"),
+		Key: lo.ToPtr("ADouble"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
@@ -193,7 +194,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, ADoubleMetaData)
 
 	AFloatMetaData := Metadata{
-		Key: lo.ToPtr("aFloat"),
+		Key: lo.ToPtr("AFloat"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
@@ -205,7 +206,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AFloatMetaData)
 
 	AnInt32MetaData := Metadata{
-		Key: lo.ToPtr("anInt32"),
+		Key: lo.ToPtr("AnInt32"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
@@ -217,7 +218,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt32MetaData)
 
 	AnInt64MetaData := Metadata{
-		Key: lo.ToPtr("anInt64"),
+		Key: lo.ToPtr("AnInt64"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
@@ -229,7 +230,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt64MetaData)
 
 	ABoolMetaData := Metadata{
-		Key: lo.ToPtr("aBool"),
+		Key: lo.ToPtr("ABool"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
@@ -240,7 +241,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, ABoolMetaData)
 
 	AStringMetaData := Metadata{
-		Key: lo.ToPtr("aString"),
+		Key: lo.ToPtr("AString"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AString)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AString)),
@@ -248,19 +249,21 @@ func (s *Thing) ToEsDocument() (Document, error) {
 
 	doc.Metadata = append(doc.Metadata, AStringMetaData)
 
-	RepeatedScalarFieldMetaData := Metadata{
-		Key: lo.ToPtr("repeatedScalarField"),
+	for _, val := range s.RepeatedScalarField {
+		metaData := Metadata{
+			Key: lo.ToPtr("RepeatedScalarField"),
 
-		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.RepeatedScalarField)),
-		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.RepeatedScalarField)),
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", val)),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", val)),
+		}
+
+		doc.Metadata = append(doc.Metadata, metaData)
 	}
-
-	doc.Metadata = append(doc.Metadata, RepeatedScalarFieldMetaData)
 
 	if s.OptionalScalarField != nil {
 
 		OptionalScalarFieldMetaData := Metadata{
-			Key: lo.ToPtr("optionalScalarField"),
+			Key: lo.ToPtr("OptionalScalarField"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
@@ -272,45 +275,65 @@ func (s *Thing) ToEsDocument() (Document, error) {
 
 	if s.AssociatedThing != nil {
 
-		AssociatedThingMetaData := Metadata{
-			Key: lo.ToPtr("associatedThing"),
-
-			StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AssociatedThing)),
-			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AssociatedThing)),
+		ThingAssociatedThingDoc := Document{
+			Type: "ThingAssociatedThing",
+			Metadata: []Metadata{
+				{
+					Key:          lo.ToPtr("ThingId"),
+					KeywordValue: s.Id,
+				},
+				{
+					Key:          lo.ToPtr("Thing2Id"),
+					KeywordValue: s.AssociatedThing.Id,
+				},
+			},
 		}
-
-		doc.Metadata = append(doc.Metadata, AssociatedThingMetaData)
+		docs = append(docs, ThingAssociatedThingDoc)
 
 	}
 
 	if s.OptionalAssociatedThing != nil {
 
-		OptionalAssociatedThingMetaData := Metadata{
-			Key: lo.ToPtr("optionalAssociatedThing"),
-
-			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalAssociatedThing))),
-			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalAssociatedThing))),
+		ThingOptionalAssociatedThingDoc := Document{
+			Type: "ThingOptionalAssociatedThing",
+			Metadata: []Metadata{
+				{
+					Key:          lo.ToPtr("ThingId"),
+					KeywordValue: s.Id,
+				},
+				{
+					Key:          lo.ToPtr("Thing2Id"),
+					KeywordValue: s.OptionalAssociatedThing.Id,
+				},
+			},
 		}
-
-		doc.Metadata = append(doc.Metadata, OptionalAssociatedThingMetaData)
+		docs = append(docs, ThingOptionalAssociatedThingDoc)
 
 	}
 
 	if s.RepeatedMessages != nil {
 
-		RepeatedMessagesMetaData := Metadata{
-			Key: lo.ToPtr("repeatedMessages"),
-
-			StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.RepeatedMessages)),
-			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.RepeatedMessages)),
+		for _, message := range s.RepeatedMessages {
+			ThingRepeatedMessagesDoc := Document{
+				Type: "ThingRepeatedMessages",
+				Metadata: []Metadata{
+					{
+						Key:          lo.ToPtr("ThingId"),
+						KeywordValue: s.Id,
+					},
+					{
+						Key:          lo.ToPtr("Thing2Id"),
+						KeywordValue: message.Id,
+					},
+				},
+			}
+			docs = append(docs, ThingRepeatedMessagesDoc)
 		}
-
-		doc.Metadata = append(doc.Metadata, RepeatedMessagesMetaData)
 
 	}
 
 	ATimestampMetaData := Metadata{
-		Key: lo.ToPtr("aTimestamp"),
+		Key: lo.ToPtr("ATimestamp"),
 	}
 
 	ATimestampMetaData.DateValue = lo.ToPtr(s.ATimestamp.AsTime().UTC().UnixMilli())
@@ -318,7 +341,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	doc.Metadata = append(doc.Metadata, ATimestampMetaData)
 
 	AnEnumMetaData := Metadata{
-		Key: lo.ToPtr("anEnum"),
+		Key: lo.ToPtr("AnEnum"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
@@ -331,7 +354,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	if s.AnOptionalInt != nil {
 
 		AnOptionalIntMetaData := Metadata{
-			Key: lo.ToPtr("anOptionalInt"),
+			Key: lo.ToPtr("AnOptionalInt"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
@@ -347,7 +370,7 @@ func (s *Thing) ToEsDocument() (Document, error) {
 	if s.OptionalTimestamp != nil {
 
 		OptionalTimestampMetaData := Metadata{
-			Key: lo.ToPtr("optionalTimestamp"),
+			Key: lo.ToPtr("OptionalTimestamp"),
 		}
 
 		OptionalTimestampMetaData.DateValue = lo.ToPtr(s.OptionalTimestamp.AsTime().UTC().UnixMilli())
@@ -356,18 +379,34 @@ func (s *Thing) ToEsDocument() (Document, error) {
 
 	}
 
-	return doc, nil
+	for _, val := range s.RepeatedInt32 {
+		metaData := Metadata{
+			Key: lo.ToPtr("RepeatedInt32"),
+
+			StringValue:  lo.ToPtr(fmt.Sprintf("%v", val)),
+			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", val)),
+		}
+
+		metaData.LongValue = lo.ToPtr(int64(val))
+		metaData.DoubleValue = lo.ToPtr(float64(val))
+
+		doc.Metadata = append(doc.Metadata, metaData)
+	}
+
+	docs = append(docs, doc)
+	return docs, nil
 }
 
 func (s *Thing) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	doc, err := s.ToEsDocument()
+	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
-	return QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *Thing2) ToEsDocument() (Document, error) {
+func (s *Thing2) ToEsDocuments() ([]Document, error) {
+	docs := []Document{}
 	doc := Document{
 		Id:       *s.Id,
 		Type:     Thing2EsType,
@@ -377,7 +416,7 @@ func (s *Thing2) ToEsDocument() (Document, error) {
 	if s.Id != nil {
 
 		IdMetaData := Metadata{
-			Key: lo.ToPtr("id"),
+			Key: lo.ToPtr("Id"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
@@ -388,7 +427,7 @@ func (s *Thing2) ToEsDocument() (Document, error) {
 	}
 
 	NameMetaData := Metadata{
-		Key: lo.ToPtr("name"),
+		Key: lo.ToPtr("Name"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.Name)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.Name)),
@@ -396,13 +435,14 @@ func (s *Thing2) ToEsDocument() (Document, error) {
 
 	doc.Metadata = append(doc.Metadata, NameMetaData)
 
-	return doc, nil
+	docs = append(docs, doc)
+	return docs, nil
 }
 
 func (s *Thing2) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	doc, err := s.ToEsDocument()
+	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
-	return QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }

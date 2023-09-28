@@ -55,6 +55,8 @@ message Thing {
   optional int32 an_optional_int = 26;
   // @gotags: fake:"skip"
   optional google.protobuf.Timestamp optional_timestamp = 27;
+  // @gotags: fake:"{int32}"
+  repeated int32 repeated_int32 = 28;
 }
 
 message Thing2 {

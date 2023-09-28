@@ -37,53 +37,79 @@ func (s *PluginSuite) SetupSuite() {
 func (s *PluginSuite) TestSearchById() {
 	thing := s.generateRandomThing()
 	s.indexThing(thing)
-	s.eventualKeywordSearch("thing", "id", *thing.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchEnum() {
 	thing := s.generateRandomThing()
 	s.indexThing(thing)
-	s.eventualKeywordSearch("thing", "anEnum", thing.AnEnum.String(), *thing.Id)
-	s.eventualLongSearch("thing", "anEnum", *thing.Id, int(thing.AnEnum.Number()))
+	s.eventualKeywordSearch("Thing", "AnEnum", thing.AnEnum.String(), *thing.Id)
+	s.eventualLongSearch("Thing", "AnEnum", *thing.Id, int(thing.AnEnum.Number()))
 }
 
 func (s *PluginSuite) TestSearchStringValue() {
 	thing := s.generateRandomThing()
 	thing.AString = "i like turtles and elephants because they're neat"
 	s.indexThing(thing)
-	s.eventualStringSearch("thing", "aString", thing.AString, *thing.Id)
+	s.eventualStringSearch("Thing", "AString", thing.AString, *thing.Id)
 	// test partial
-	s.eventualStringSearch("thing", "aString", "turtles", *thing.Id)
+	s.eventualStringSearch("Thing", "AString", "turtles", *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchLongValue() {
 	thing := s.indexRandomThing()
-	s.eventualLongSearch("thing", "anInt32", *thing.Id, int(thing.AnInt32))
-	s.eventualStringSearch("thing", "anInt32", fmt.Sprintf("%d", thing.AnInt32), *thing.Id)
-	s.eventualLongSearch("thing", "anInt64", *thing.Id, int(thing.AnInt64))
-	s.eventualStringSearch("thing", "anInt64", fmt.Sprintf("%d", thing.AnInt64), *thing.Id)
+	s.eventualLongSearch("Thing", "AnInt32", *thing.Id, int(thing.AnInt32))
+	s.eventualStringSearch("Thing", "AnInt32", fmt.Sprintf("%d", thing.AnInt32), *thing.Id)
+	s.eventualLongSearch("Thing", "AnInt64", *thing.Id, int(thing.AnInt64))
+	s.eventualStringSearch("Thing", "AnInt64", fmt.Sprintf("%d", thing.AnInt64), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchDoubleValue() {
 	thing := s.indexRandomThing()
-	s.eventualDoubleSearch("thing", "aDouble", *thing.Id, thing.ADouble)
-	s.eventualStringSearch("thing", "aDouble", fmt.Sprintf("%v", thing.ADouble), *thing.Id)
+	s.eventualDoubleSearch("Thing", "ADouble", *thing.Id, thing.ADouble)
+	s.eventualStringSearch("Thing", "ADouble", fmt.Sprintf("%v", thing.ADouble), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchDateValue() {
 	thing := s.indexRandomThing()
-	s.eventualDateSearch("thing", "aTimestamp", *thing.Id, thing.ATimestamp.AsTime())
+	s.eventualDateSearch("Thing", "ATimestamp", *thing.Id, thing.ATimestamp.AsTime())
 }
 
 func (s *PluginSuite) TestSearchBoolValue() {
 	thing := s.indexRandomThing()
-	s.eventualBoolSearch("thing", "aBool", *thing.Id, thing.ABool)
-	s.eventualStringSearch("thing", "aBool", fmt.Sprintf("%t", thing.ABool), *thing.Id)
+	s.eventualBoolSearch("Thing", "ABool", *thing.Id, thing.ABool)
+	s.eventualStringSearch("Thing", "ABool", fmt.Sprintf("%t", thing.ABool), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchKeywordValue() {
 	thing := s.indexRandomThing()
-	s.eventualKeywordSearch("thing", "aString", thing.AString, *thing.Id)
+	s.eventualKeywordSearch("Thing", "AString", thing.AString, *thing.Id)
+}
+
+func (s *PluginSuite) TestSearchRepeatedValue() {
+	thing := s.indexRandomThing()
+	require.Greater(s.T(), len(thing.RepeatedInt32), 1)
+	for _, num := range thing.RepeatedInt32 {
+		s.eventualLongSearch("Thing", "RepeatedInt32", *thing.Id, int(num))
+	}
+}
+
+func (s *PluginSuite) TestSearchRelatedObject() {
+	thing := s.indexRandomThingWithRelationships()
+	// search for relationship object by thing id
+	s.eventualKeywordSearch("ThingAssociatedThing", "ThingId", *thing.Id, *thing.Id)
+	// search for relationship object by thing2 id
+	s.eventualKeywordSearch("ThingAssociatedThing", "Thing2Id", *thing.AssociatedThing.Id, *thing.Id)
+	// search for repeated relationship objects by thing id
+	s.eventualKeywordSearch("ThingRepeatedMessages", "ThingId", *thing.Id, *thing.Id)
+	// search for repeated relationship objects by thing2 id
+	s.eventualKeywordSearch("ThingRepeatedMessages", "Thing2Id", *thing.RepeatedMessages[0].Id, *thing.Id)
+	s.eventualKeywordSearch("ThingRepeatedMessages", "Thing2Id", *thing.RepeatedMessages[1].Id, *thing.Id)
+	// search for associated thing by name
+	s.eventualKeywordSearch("Thing2", "Name", thing.AssociatedThing.Name, *thing.AssociatedThing.Id)
+	// serach for repeated things by name
+	s.eventualKeywordSearch("Thing2", "Name", thing.RepeatedMessages[0].Name, *thing.RepeatedMessages[0].Id)
+	s.eventualKeywordSearch("Thing2", "Name", thing.RepeatedMessages[1].Name, *thing.RepeatedMessages[1].Id)
 }
 
 func (s *PluginSuite) startElasticsearch(t *testing.T) {
@@ -102,6 +128,7 @@ func (s *PluginSuite) startElasticsearch(t *testing.T) {
 	})
 }
 
+// TODO: Refactor this to stop repeating myself in query building
 func getStringQuery(theType, key, query string) string {
 	return fmt.Sprintf(`
 {
@@ -288,6 +315,23 @@ func (s *PluginSuite) indexRandomThing() *example_example.Thing {
 	return thing
 }
 
+func (s *PluginSuite) indexRandomThingWithRelationships() *example_example.Thing {
+	thing := s.generateRandomThing()
+	thing2 := s.generateRandomThing2()
+	repeatedThing2A := s.generateRandomThing2()
+	repeatedThing2B := s.generateRandomThing2()
+	thing.AssociatedThing = thing2
+	thing.RepeatedMessages = []*example_example.Thing2{
+		repeatedThing2A,
+		repeatedThing2B,
+	}
+	s.indexThing(thing)
+	s.indexThing2(thing2)
+	s.indexThing2(repeatedThing2A)
+	s.indexThing2(repeatedThing2B)
+	return thing
+}
+
 func (s *PluginSuite) generateRandomThing() *example_example.Thing {
 	thing := &example_example.Thing{}
 	err := gofakeit.Struct(&thing)
@@ -296,8 +340,20 @@ func (s *PluginSuite) generateRandomThing() *example_example.Thing {
 	return thing
 }
 
+func (s *PluginSuite) generateRandomThing2() *example_example.Thing2 {
+	thing2 := &example_example.Thing2{}
+	err := gofakeit.Struct(&thing2)
+	require.NoError(s.T(), err)
+	return thing2
+}
+
 func (s *PluginSuite) indexThing(thing *example_example.Thing) {
 	err := thing.Index(context.Background(), nil, nil)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
+	err := thing2.Index(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 

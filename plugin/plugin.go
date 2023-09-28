@@ -41,8 +41,8 @@ var templateFuncs = map[string]any{
 	"isBoolean":        isBoolean,
 	"isTimestamp":      isTimestamp,
 	"isStructPb":       isStructPb,
-	"isEnum":           isEnum,
 	"isBytes":          isBytes,
+	"isRelationship":   isRelationship,
 	"maybeDereference": maybeDereference,
 	"isReference":      isReference,
 	"indexName":        getIndexName,
@@ -251,12 +251,12 @@ func isStructPb(field *protogen.Field) bool {
 	return field.Desc.Message() != nil && field.Desc.Message().FullName() == "google.protobuf.Struct"
 }
 
-func isEnum(field *protogen.Field) bool {
-	return field.Desc.Message() != nil && field.Desc.Message().FullName() == "google.protobuf.Struct"
-}
-
 func isBytes(field *protogen.Field) bool {
 	return field.Desc.Kind() == protoreflect.BytesKind
+}
+
+func isRelationship(field *protogen.Field) bool {
+	return field.Message != nil && !isTimestamp(field) && !isStructPb(field)
 }
 
 func maybeDereference(field *protogen.Field) string {
@@ -267,10 +267,15 @@ func maybeDereference(field *protogen.Field) string {
 }
 
 func fieldValueString(field *protogen.Field) string {
-	if field.Desc.HasOptionalKeyword() {
-		return fmt.Sprintf("lo.FromPtr(s.%s)", field.GoName)
+	name := fmt.Sprintf("s.%s", field.GoName)
+	if field.Desc.IsList() {
+		// template uses val for repeated fields
+		name = "val"
 	}
-	return fmt.Sprintf("s.%s", field.GoName)
+	if field.Desc.HasOptionalKeyword() {
+		return fmt.Sprintf("lo.FromPtr(%s)", name)
+	}
+	return fmt.Sprintf("%s", name)
 }
 
 func isReference(field *protogen.Field) bool {
