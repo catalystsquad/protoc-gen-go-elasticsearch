@@ -179,12 +179,12 @@ func getMessageOptions(message *protogen.Message) *elasticsearch.ElasticsearchMe
 
 	v := proto.GetExtension(options, elasticsearch.E_ElasticsearchOpts)
 	if v == nil {
-		return nil
+		return &elasticsearch.ElasticsearchMessageOptions{}
 	}
 
 	opts, ok := v.(*elasticsearch.ElasticsearchMessageOptions)
-	if !ok {
-		return nil
+	if !ok || opts == nil {
+		return &elasticsearch.ElasticsearchMessageOptions{}
 	}
 	return opts
 }
