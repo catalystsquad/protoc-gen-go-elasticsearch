@@ -25,26 +25,26 @@ const {{ .Desc.Name}}EsType = "{{ .Desc.Name }}"
 {{- end -}}
 {{ end }}
 
-const indexName = "{{ indexName .file }}"
+const ElasticsearchIndexName = "{{ indexName .file }}"
 var addresses = env.GetEnvOrDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
 var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "1s")
-var Client *v8.Client
-var BulkIndexer esutil.BulkIndexer
+var ElasticsearchClient *v8.Client
+var ElasticsearchBulkIndexer esutil.BulkIndexer
 
 func init() {
 	cfg := v8.Config{
 		Addresses: strings.Split(addresses, ","),
 	}
 	var err error
-	Client, err = v8.NewClient(cfg)
+	ElasticsearchClient, err = v8.NewClient(cfg)
 	errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"addresses": addresses}), "error creating elasticsearch client", err)
 	if err != nil {
 		logging.Log.Info("elasticsearch client initialized")
 	}
 	if err == nil {
-		BulkIndexer, err = esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
-			Index:         indexName,
-			Client:        Client,
+		ElasticsearchBulkIndexer, err = esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+			Index:         ElasticsearchIndexName,
+			Client:        ElasticsearchClient,
 			FlushInterval: flushInterval,
 		})
 		errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"addresses": addresses}), "error creating elasticsearch bulk indexer", err)
@@ -62,12 +62,12 @@ func IndexWaitForRefresh(ctx context.Context, docs []Document) error {
 			return err
 		}
 		req := esapi.IndexRequest{
-			Index:      indexName,
+			Index:      ElasticsearchIndexName,
 			DocumentID: doc.Id,
 			Body:       bytes.NewReader(data),
 			Refresh:    "wait_for",
 		}
-		response, err := req.Do(ctx, Client)
+		response, err := req.Do(ctx, ElasticsearchClient)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func EnsureIndex(client *v8.Client) error {
 
 func createIndex(client *v8.Client) error {
 	req := esapi.IndicesCreateRequest{
-		Index: indexName,
+		Index: ElasticsearchIndexName,
 	}
 	response, err := req.Do(context.Background(), client)
 	if err != nil {
@@ -111,7 +111,7 @@ func createIndex(client *v8.Client) error {
 func putMappings(client *v8.Client) error {
 	settings := strings.NewReader("{\"properties\":{\"id\":{\"type\":\"keyword\"},\"type\":{\"type\":\"keyword\"},\"metadata\":{\"type\":\"nested\",\"properties\":{\"key\":{\"type\":\"keyword\"},\"keywordValue\":{\"type\":\"keyword\"},\"stringValue\":{\"type\":\"text\"},\"longValue\":{\"type\":\"long\"},\"doubleValue\":{\"type\":\"double\"},\"dateValue\":{\"type\":\"date\"},\"boolValue\":{\"type\":\"boolean\"}}}}}")
 	req := esapi.IndicesPutMappingRequest{
-		Index: []string{indexName},
+		Index: []string{ElasticsearchIndexName},
 		Body:  settings,
 	}
 	response, err := req.Do(context.Background(), client)
@@ -126,11 +126,11 @@ func putMappings(client *v8.Client) error {
 
 func indexExists(client *v8.Client) (bool, error) {
 	req := esapi.IndicesGetRequest{
-		Index: []string{indexName},
+		Index: []string{ElasticsearchIndexName},
 	}
 	response, err := req.Do(context.Background(), client)
 	if err != nil {
-		errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"index": indexName}), "error getting index", err)
+		errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"index": ElasticsearchIndexName}), "error getting index", err)
 		return false, err
 	}
 	if response.StatusCode == 404 {
@@ -163,7 +163,7 @@ func QueueDocsForDeletion(ctx context.Context, docs []Document, onSuccess func(c
 func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	item := esutil.BulkIndexerItem{
 		Action:     action,
-		Index:      indexName,
+		Index:      ElasticsearchIndexName,
 		DocumentID: id,
 	}
 	if body != nil {
@@ -175,7 +175,7 @@ func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onS
 	if onFailure != nil {
 		item.OnFailure = onFailure
 	}
-	err := BulkIndexer.Add(ctx, item)
+	err := ElasticsearchBulkIndexer.Add(ctx, item)
 	errorutils.LogOnErr(nil, "error adding item to bulk indexer", err)
 	return err
 }
@@ -343,10 +343,10 @@ func (s *{{ .Desc.Name }}) IndexWaitForRefresh(ctx context.Context) error {
 
 func (s *{{ .Desc.Name }}) Clear(ctx context.Context) error {
 	req := esapi.DeleteByQueryRequest{
-		Index: []string{indexName},
+		Index: []string{ElasticsearchIndexName},
 		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
 	}
-	response, err := req.Do(ctx, Client)
+	response, err := req.Do(ctx, ElasticsearchClient)
 	if err != nil {
 		return err
 	}
@@ -402,10 +402,10 @@ func (s *{{ .Desc.Name }}) GetClearQuery() string {
 
 func (s *{{ .Desc.Name }}) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	req := esapi.DeleteByQueryRequest{
-		Index: []string{indexName},
+		Index: []string{ElasticsearchIndexName},
 		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
 	}
-	response, err := req.Do(ctx, Client)
+	response, err := req.Do(ctx, ElasticsearchClient)
 	if err != nil {
 		return err
 	}

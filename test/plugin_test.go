@@ -553,7 +553,7 @@ func (s *PluginSuite) eventualSearch(query, expected string) {
 }
 
 func (s *PluginSuite) search(query string) string {
-	response, err := example_example.Client.Search(example_example.Client.Search.WithIndex("data"), example_example.Client.Search.WithBody(strings.NewReader(query)))
+	response, err := example_example.ElasticsearchClient.Search(example_example.ElasticsearchClient.Search.WithIndex("data"), example_example.ElasticsearchClient.Search.WithBody(strings.NewReader(query)))
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), response.StatusCode, 200)
 	body, err := io.ReadAll(response.Body)
