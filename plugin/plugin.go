@@ -122,6 +122,7 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "fmt"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "strings"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "bytes"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "io"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/samber/lo"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esapi"})

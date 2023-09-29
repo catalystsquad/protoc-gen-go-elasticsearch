@@ -27,7 +27,7 @@ const {{ .Desc.Name}}EsType = "{{ .Desc.Name }}"
 
 const indexName = "{{ indexName .file }}"
 var addresses = env.GetEnvOrDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
-var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "5s")
+var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "1s")
 var Client *v8.Client
 var BulkIndexer esutil.BulkIndexer
 
@@ -52,6 +52,32 @@ func init() {
 			logging.Log.Info("elasticsearch bulk indexer initialized")
 		}
 	}
+}
+
+func IndexWaitForRefresh(ctx context.Context, docs []Document) error {
+	for _, doc := range docs {
+		data, err := json.Marshal(doc)
+		if err != nil {
+			errorutils.LogOnErr(nil, "error marshalling document to json", err)
+			return err
+		}
+		req := esapi.IndexRequest{
+			Index:      indexName,
+			DocumentID: doc.Id,
+			Body:       bytes.NewReader(data),
+			Refresh:    "wait_for",
+		}
+		response, err := req.Do(ctx, Client)
+		if err != nil {
+			return err
+		}
+		if response.StatusCode != 201 {
+			bodyBytes, _ := io.ReadAll(response.Body)
+			return errorx.IllegalState.New("unexpected status code indexing with refresh: %d with body: %s", response.StatusCode, string(bodyBytes))
+		}	
+	}
+	
+	return nil
 }
 
 func EnsureIndex(client *v8.Client) error {
@@ -125,17 +151,23 @@ func QueueDocsForIndexing(ctx context.Context, docs []Document, onSuccess func(c
 	return nil
 }
 
-func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	data, err := json.Marshal(doc)
-	if err != nil {
-		errorutils.LogOnErr(nil, "error marshalling document to json", err)
-		return err
+func QueueDocsForDeletion(ctx context.Context, docs []Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	for _, doc := range docs {
+		if err := QueueDocForIndexing(ctx, doc, onSuccess, onFailure); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	item := esutil.BulkIndexerItem{
-		Action:     "index",
+		Action:     action,
 		Index:      indexName,
-		DocumentID: doc.Id,
-		Body:       bytes.NewReader(data),
+		DocumentID: id,
+	}
+	if body != nil {
+		item.Body = bytes.NewReader(body)
 	}
 	if onSuccess != nil {
 		item.OnSuccess = onSuccess
@@ -143,9 +175,22 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 	if onFailure != nil {
 		item.OnFailure = onFailure
 	}
-	err = BulkIndexer.Add(ctx, item)
+	err := BulkIndexer.Add(ctx, item)
 	errorutils.LogOnErr(nil, "error adding item to bulk indexer", err)
 	return err
+}
+
+func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	data, err := json.Marshal(doc)
+	if err != nil {
+		errorutils.LogOnErr(nil, "error marshalling document to json", err)
+		return err
+	}
+	return QueueBulkIndexItem(ctx, doc.Id, "index", data, onSuccess, onFailure)
+}
+
+func QueueDocForDeletion(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	return QueueBulkIndexItem(ctx, doc.Id, "delete", nil, onSuccess, onFailure)
 }
 
 {{ range .messages }}
@@ -165,36 +210,60 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 	{{ if isRelationship . }}
 	{{ if .Desc.IsList }}
 	for _, message := range s.{{ .GoName }} {
-		{{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc := Document {
-		Type: "{{ .Parent.GoIdent.GoName }}{{ .GoName }}",
-		Metadata: []Metadata{
-			{
-				Key: lo.ToPtr("{{ .Parent.GoIdent.GoName }}Id"),
-                KeywordValue: s.Id,
+		doc := Document{
+			Type: "joinRecord",
+			Metadata: []Metadata{
+				{
+					Key: lo.ToPtr("fieldName"),
+					KeywordValue: lo.ToPtr("{{ .GoName}}"),
+				},
+				{
+					Key: lo.ToPtr("parentType"),
+					KeywordValue: lo.ToPtr("{{ .Parent.GoIdent.GoName }}"),
+				},
+				{
+					Key: lo.ToPtr("childType"),
+					KeywordValue: lo.ToPtr("{{ .Message.GoIdent.GoName }}"),
+				},
+				{
+					Key: lo.ToPtr("parentId"),
+					KeywordValue: s.Id,
+				},
+				{
+					Key: lo.ToPtr("childId"),
+					KeywordValue: message.Id,
+				},
 			},
-			{
-				Key: lo.ToPtr("{{ .Message.GoIdent.GoName }}Id"),
-                KeywordValue: message.Id,
-			},
-		},
-	}
-	docs = append(docs, {{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc)
+		}
+		docs = append(docs, doc)
 	}
 	{{ else }}
-	{{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc := Document {
-		Type: "{{ .Parent.GoIdent.GoName }}{{ .GoName }}",
+	doc := Document{
+		Type: "joinRecord",
 		Metadata: []Metadata{
 			{
-				Key: lo.ToPtr("{{ .Parent.GoIdent.GoName }}Id"),
-                KeywordValue: s.Id,
+				Key: lo.ToPtr("fieldName"),
+				KeywordValue: lo.ToPtr("{{ .GoName}}"),
 			},
 			{
-				Key: lo.ToPtr("{{ .Message.GoIdent.GoName }}Id"),
-                KeywordValue: s.{{ .GoName }}.Id,
+				Key: lo.ToPtr("parentType"),
+				KeywordValue: lo.ToPtr("{{ .Parent.GoIdent.GoName }}"),
+			},
+			{
+				Key: lo.ToPtr("childType"),
+				KeywordValue: lo.ToPtr("{{ .Message.GoIdent.GoName }}"),
+			},
+			{
+				Key: lo.ToPtr("parentId"),
+				KeywordValue: s.Id,
+			},
+			{
+				Key: lo.ToPtr("childId"),
+				KeywordValue: s.{{ .GoName}}.Id,
 			},
 		},
 	}
-	docs = append(docs, {{ .Parent.GoIdent.GoName }}{{ .GoName }}Doc)
+	docs = append(docs, doc)
 	{{ end }}
 	{{ else }}
 	{{ if .Desc.IsList }}
@@ -249,11 +318,178 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 }
 
 func (s *{{ .Desc.Name }}) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
+}
+
+func (s *{{ .Desc.Name }}) IndexWaitForRefresh(ctx context.Context) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return IndexWaitForRefresh(ctx, docs)
+}
+
+func (s *{{ .Desc.Name }}) Clear(ctx context.Context) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code clearing {{ .Desc.Name }}: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *{{ .Desc.Name }}) GetClearQuery() string {
+	return fmt.Sprintf(` + "`" + `
+{
+	"query": {
+    	"bool": {
+			"must": [
+				{
+					"term": {
+						"type": "joinRecord"
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentType" } },
+									{ "match": { "metadata.keywordValue": "{{ .Desc.Name }}" } }
+								]
+							}
+						}
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentId" } },
+									{ "match": { "metadata.keywordValue": "%s" } }
+								]
+							}
+						}
+					}
+				}
+			]
+		}
+	}
+}` + "`" + `, *s.Id)
+}
+
+func (s *{{ .Desc.Name }}) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code deleting {{ .Desc.Name }}: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *{{ .Desc.Name }}) GetDeleteQuery() string {
+	return fmt.Sprintf(` + "`" + `
+{
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "term": {
+            "id": "%s"
+          }
+        },
+        {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "type": "joinRecord"
+                }
+              },
+              {
+                "bool": {
+                  "should": [
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "parentId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "childId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}` + "`" + `, *s.Id, *s.Id, *s.Id)
 }
 {{ end }}
 {{ end }}

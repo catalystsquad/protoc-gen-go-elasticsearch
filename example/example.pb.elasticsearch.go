@@ -14,6 +14,7 @@ import (
 	errorx "github.com/joomcode/errorx"
 	lo "github.com/samber/lo"
 	logrus "github.com/sirupsen/logrus"
+	io "io"
 	strings "strings"
 )
 
@@ -39,7 +40,7 @@ const Thing2EsType = "Thing2"
 const indexName = "data"
 
 var addresses = env.GetEnvOrDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
-var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "5s")
+var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "1s")
 var Client *v8.Client
 var BulkIndexer esutil.BulkIndexer
 
@@ -64,6 +65,32 @@ func init() {
 			logging.Log.Info("elasticsearch bulk indexer initialized")
 		}
 	}
+}
+
+func IndexWaitForRefresh(ctx context.Context, docs []Document) error {
+	for _, doc := range docs {
+		data, err := json.Marshal(doc)
+		if err != nil {
+			errorutils.LogOnErr(nil, "error marshalling document to json", err)
+			return err
+		}
+		req := esapi.IndexRequest{
+			Index:      indexName,
+			DocumentID: doc.Id,
+			Body:       bytes.NewReader(data),
+			Refresh:    "wait_for",
+		}
+		response, err := req.Do(ctx, Client)
+		if err != nil {
+			return err
+		}
+		if response.StatusCode != 201 {
+			bodyBytes, _ := io.ReadAll(response.Body)
+			return errorx.IllegalState.New("unexpected status code indexing with refresh: %d with body: %s", response.StatusCode, string(bodyBytes))
+		}
+	}
+
+	return nil
 }
 
 func EnsureIndex(client *v8.Client) error {
@@ -137,17 +164,23 @@ func QueueDocsForIndexing(ctx context.Context, docs []Document, onSuccess func(c
 	return nil
 }
 
-func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	data, err := json.Marshal(doc)
-	if err != nil {
-		errorutils.LogOnErr(nil, "error marshalling document to json", err)
-		return err
+func QueueDocsForDeletion(ctx context.Context, docs []Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	for _, doc := range docs {
+		if err := QueueDocForIndexing(ctx, doc, onSuccess, onFailure); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	item := esutil.BulkIndexerItem{
-		Action:     "index",
+		Action:     action,
 		Index:      indexName,
-		DocumentID: doc.Id,
-		Body:       bytes.NewReader(data),
+		DocumentID: id,
+	}
+	if body != nil {
+		item.Body = bytes.NewReader(body)
 	}
 	if onSuccess != nil {
 		item.OnSuccess = onSuccess
@@ -155,9 +188,22 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 	if onFailure != nil {
 		item.OnFailure = onFailure
 	}
-	err = BulkIndexer.Add(ctx, item)
+	err := BulkIndexer.Add(ctx, item)
 	errorutils.LogOnErr(nil, "error adding item to bulk indexer", err)
 	return err
+}
+
+func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	data, err := json.Marshal(doc)
+	if err != nil {
+		errorutils.LogOnErr(nil, "error marshalling document to json", err)
+		return err
+	}
+	return QueueBulkIndexItem(ctx, doc.Id, "index", data, onSuccess, onFailure)
+}
+
+func QueueDocForDeletion(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	return QueueBulkIndexItem(ctx, doc.Id, "delete", nil, onSuccess, onFailure)
 }
 
 func (s *Thing) ToEsDocuments() ([]Document, error) {
@@ -275,59 +321,95 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	if s.AssociatedThing != nil {
 
-		ThingAssociatedThingDoc := Document{
-			Type: "ThingAssociatedThing",
+		doc := Document{
+			Type: "joinRecord",
 			Metadata: []Metadata{
 				{
-					Key:          lo.ToPtr("ThingId"),
+					Key:          lo.ToPtr("fieldName"),
+					KeywordValue: lo.ToPtr("AssociatedThing"),
+				},
+				{
+					Key:          lo.ToPtr("parentType"),
+					KeywordValue: lo.ToPtr("Thing"),
+				},
+				{
+					Key:          lo.ToPtr("childType"),
+					KeywordValue: lo.ToPtr("Thing2"),
+				},
+				{
+					Key:          lo.ToPtr("parentId"),
 					KeywordValue: s.Id,
 				},
 				{
-					Key:          lo.ToPtr("Thing2Id"),
+					Key:          lo.ToPtr("childId"),
 					KeywordValue: s.AssociatedThing.Id,
 				},
 			},
 		}
-		docs = append(docs, ThingAssociatedThingDoc)
+		docs = append(docs, doc)
 
 	}
 
 	if s.OptionalAssociatedThing != nil {
 
-		ThingOptionalAssociatedThingDoc := Document{
-			Type: "ThingOptionalAssociatedThing",
+		doc := Document{
+			Type: "joinRecord",
 			Metadata: []Metadata{
 				{
-					Key:          lo.ToPtr("ThingId"),
+					Key:          lo.ToPtr("fieldName"),
+					KeywordValue: lo.ToPtr("OptionalAssociatedThing"),
+				},
+				{
+					Key:          lo.ToPtr("parentType"),
+					KeywordValue: lo.ToPtr("Thing"),
+				},
+				{
+					Key:          lo.ToPtr("childType"),
+					KeywordValue: lo.ToPtr("Thing2"),
+				},
+				{
+					Key:          lo.ToPtr("parentId"),
 					KeywordValue: s.Id,
 				},
 				{
-					Key:          lo.ToPtr("Thing2Id"),
+					Key:          lo.ToPtr("childId"),
 					KeywordValue: s.OptionalAssociatedThing.Id,
 				},
 			},
 		}
-		docs = append(docs, ThingOptionalAssociatedThingDoc)
+		docs = append(docs, doc)
 
 	}
 
 	if s.RepeatedMessages != nil {
 
 		for _, message := range s.RepeatedMessages {
-			ThingRepeatedMessagesDoc := Document{
-				Type: "ThingRepeatedMessages",
+			doc := Document{
+				Type: "joinRecord",
 				Metadata: []Metadata{
 					{
-						Key:          lo.ToPtr("ThingId"),
+						Key:          lo.ToPtr("fieldName"),
+						KeywordValue: lo.ToPtr("RepeatedMessages"),
+					},
+					{
+						Key:          lo.ToPtr("parentType"),
+						KeywordValue: lo.ToPtr("Thing"),
+					},
+					{
+						Key:          lo.ToPtr("childType"),
+						KeywordValue: lo.ToPtr("Thing2"),
+					},
+					{
+						Key:          lo.ToPtr("parentId"),
 						KeywordValue: s.Id,
 					},
 					{
-						Key:          lo.ToPtr("Thing2Id"),
+						Key:          lo.ToPtr("childId"),
 						KeywordValue: message.Id,
 					},
 				},
 			}
-			docs = append(docs, ThingRepeatedMessagesDoc)
+			docs = append(docs, doc)
 		}
 
 	}
@@ -398,11 +480,178 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 }
 
 func (s *Thing) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
+}
+
+func (s *Thing) IndexWaitForRefresh(ctx context.Context) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return IndexWaitForRefresh(ctx, docs)
+}
+
+func (s *Thing) Clear(ctx context.Context) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code clearing Thing: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *Thing) GetClearQuery() string {
+	return fmt.Sprintf(`
+{
+	"query": {
+    	"bool": {
+			"must": [
+				{
+					"term": {
+						"type": "joinRecord"
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentType" } },
+									{ "match": { "metadata.keywordValue": "Thing" } }
+								]
+							}
+						}
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentId" } },
+									{ "match": { "metadata.keywordValue": "%s" } }
+								]
+							}
+						}
+					}
+				}
+			]
+		}
+	}
+}`, *s.Id)
+}
+
+func (s *Thing) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code deleting Thing: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *Thing) GetDeleteQuery() string {
+	return fmt.Sprintf(`
+{
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "term": {
+            "id": "%s"
+          }
+        },
+        {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "type": "joinRecord"
+                }
+              },
+              {
+                "bool": {
+                  "should": [
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "parentId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "childId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}`, *s.Id, *s.Id, *s.Id)
 }
 
 func (s *Thing2) ToEsDocuments() ([]Document, error) {
@@ -440,9 +689,176 @@ func (s *Thing2) ToEsDocuments() ([]Document, error) {
 }
 
 func (s *Thing2) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
+}
+
+func (s *Thing2) IndexWaitForRefresh(ctx context.Context) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return IndexWaitForRefresh(ctx, docs)
+}
+
+func (s *Thing2) Clear(ctx context.Context) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code clearing Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *Thing2) GetClearQuery() string {
+	return fmt.Sprintf(`
+{
+	"query": {
+    	"bool": {
+			"must": [
+				{
+					"term": {
+						"type": "joinRecord"
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentType" } },
+									{ "match": { "metadata.keywordValue": "Thing2" } }
+								]
+							}
+						}
+					}
+				},
+				{
+					"nested": {
+						"path": "metadata",
+						"query": {
+							"bool": {
+								"must": [
+									{ "match": { "metadata.key": "parentId" } },
+									{ "match": { "metadata.keywordValue": "%s" } }
+								]
+							}
+						}
+					}
+				}
+			]
+		}
+	}
+}`, *s.Id)
+}
+
+func (s *Thing2) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	req := esapi.DeleteByQueryRequest{
+		Index: []string{indexName},
+		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
+	}
+	response, err := req.Do(ctx, Client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code deleting Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *Thing2) GetDeleteQuery() string {
+	return fmt.Sprintf(`
+{
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "term": {
+            "id": "%s"
+          }
+        },
+        {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "type": "joinRecord"
+                }
+              },
+              {
+                "bool": {
+                  "should": [
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "parentId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "nested": {
+                        "path": "metadata",
+                        "query": {
+                          "bool": {
+                            "must": [
+                              {
+                                "match": {
+                                  "metadata.key": "childId"
+                                }
+                              },
+                              {
+                                "match": {
+                                  "metadata.keywordValue": "%s"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}`, *s.Id, *s.Id, *s.Id)
 }
