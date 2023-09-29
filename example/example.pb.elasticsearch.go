@@ -67,7 +67,7 @@ func init() {
 	}
 }
 
-func IndexWaitForRefresh(ctx context.Context, docs []Document) error {
+func IndexSync(ctx context.Context, docs []Document, refresh string) error {
 	for _, doc := range docs {
 		data, err := json.Marshal(doc)
 		if err != nil {
@@ -78,7 +78,7 @@ func IndexWaitForRefresh(ctx context.Context, docs []Document) error {
 			Index:      ElasticsearchIndexName,
 			DocumentID: doc.Id,
 			Body:       bytes.NewReader(data),
-			Refresh:    "wait_for",
+			Refresh:    refresh,
 		}
 		response, err := req.Do(ctx, ElasticsearchClient)
 		if err != nil {
@@ -479,7 +479,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	return docs, nil
 }
 
-func (s *Thing) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	err := s.Clear(ctx)
 	if err != nil {
 		return err
@@ -491,7 +491,7 @@ func (s *Thing) Index(ctx context.Context, onSuccess func(ctx context.Context, i
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *Thing) IndexWaitForRefresh(ctx context.Context) error {
+func (s *Thing) IndexSyncWithRefresh(ctx context.Context) error {
 	err := s.Clear(ctx)
 	if err != nil {
 		return err
@@ -500,7 +500,19 @@ func (s *Thing) IndexWaitForRefresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return IndexWaitForRefresh(ctx, docs)
+	return IndexSync(ctx, docs, "wait_for")
+}
+
+func (s *Thing) IndexSync(ctx context.Context, refresh string) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return IndexSync(ctx, docs, refresh)
 }
 
 func (s *Thing) Clear(ctx context.Context) error {
@@ -688,7 +700,7 @@ func (s *Thing2) ToEsDocuments() ([]Document, error) {
 	return docs, nil
 }
 
-func (s *Thing2) Index(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing2) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	err := s.Clear(ctx)
 	if err != nil {
 		return err
@@ -700,7 +712,7 @@ func (s *Thing2) Index(ctx context.Context, onSuccess func(ctx context.Context, 
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *Thing2) IndexWaitForRefresh(ctx context.Context) error {
+func (s *Thing2) IndexSyncWithRefresh(ctx context.Context) error {
 	err := s.Clear(ctx)
 	if err != nil {
 		return err
@@ -709,7 +721,19 @@ func (s *Thing2) IndexWaitForRefresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return IndexWaitForRefresh(ctx, docs)
+	return IndexSync(ctx, docs, "wait_for")
+}
+
+func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
+	err := s.Clear(ctx)
+	if err != nil {
+		return err
+	}
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return IndexSync(ctx, docs, refresh)
 }
 
 func (s *Thing2) Clear(ctx context.Context) error {

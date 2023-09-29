@@ -140,9 +140,9 @@ func (s *PluginSuite) TestDelete() {
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) TestIndexWaitForRefresh() {
+func (s *PluginSuite) TestIndexSyncWithRefresh() {
 	thing := s.generateRandomThing()
-	err := thing.IndexWaitForRefresh(context.Background())
+	err := thing.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 	response := s.keywordSearch("Thing", "Id", *thing.Id)
 	require.Contains(s.T(), response, *thing.Id)
@@ -466,12 +466,12 @@ func (s *PluginSuite) generateRandomThing2() *example_example.Thing2 {
 }
 
 func (s *PluginSuite) indexThing(thing *example_example.Thing) {
-	err := thing.Index(context.Background(), nil, nil)
+	err := thing.IndexAsync(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
 func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
-	err := thing2.Index(context.Background(), nil, nil)
+	err := thing2.IndexAsync(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
