@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package elasticsearch;
+
+option go_package = "github.com/catalystsquad/protoc-gen-go-elasticsearch/options;elasticsearch";
+
+import "google/protobuf/descriptor.proto";
+
+// Currently no file options
+extend google.protobuf.FileOptions {
+  elasticsearchFileOptions elasticsearch_file_opts = 52120;
+}
+
+message elasticsearchFileOptions {
+  bool generate = 1;
+  string indexName = 2;
+}
+
+// Validation rules applied at the message level
+extend google.protobuf.MessageOptions {
+  // ormable will cause orm code to be generated for this message/object
+  elasticsearchMessageOptions elasticsearch_opts = 52120;
+}
+
+message elasticsearchMessageOptions {
+  bool generate = 1;
+}
+
+// Field level specifications
+extend google.protobuf.FieldOptions {
+  elasticsearchFieldOptions elasticsearch_field = 52120;
+}
+
+message elasticsearchFieldOptions {
+  bool ignore = 2;
+  bool keyword = 3;
+}

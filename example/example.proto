@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package test;
+
+option go_package = "example.example";
+option (elasticsearch.elasticsearch_file_opts) = {generate: true};
+import "options/elasticsearch_options.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+enum AnEnumType {
+  AN_ENUM_UNSPECIFIED = 0;
+  AN_ENUM_ALPHA = 1;
+  AN_ENUM_BRAVO = 2;
+
+}
+
+message Thing {
+  option (elasticsearch.elasticsearch_opts) = {generate: true};
+  // @gotags: fake:"{uuid}"
+  optional string id = 1;
+  // @gotags: fake:"{price:0.00,1000.00}"
+  double a_double = 2 [(elasticsearch.elasticsearch_field).keyword = true];
+  // @gotags: fake:"{price:0.00,1000.00}"
+  float a_float = 3;
+  // @gotags: fake:"{int32}"
+  int32 an_int32 = 4;
+  // @gotags: fake:"{int64}"
+  int64 an_int64 = 5;
+  // @gotags: fake:"{bool}"
+  bool a_bool = 14;
+  // @gotags: fake:"{hackerphrase}"
+  string a_string = 15;
+  // @gotags: fake:"skip"
+  bytes a_bytes = 16;
+  // @gotags: fake:"{hackerphrase}"
+  repeated string repeated_scalar_field = 17;
+  // @gotags: fake:"skip"
+  optional string optional_scalar_field = 18;
+  // @gotags: fake:"skip"
+  Thing2 associated_thing = 19;
+  // @gotags: fake:"skip"
+  optional Thing2 optional_associated_thing = 20;
+  // @gotags: fake:"skip"
+  repeated Thing2 repeated_messages = 21;
+  // @gotags: fake:"skip"
+  google.protobuf.Timestamp a_timestamp = 22;
+  // @gotags: fake:"skip"
+  string an_ignored_field = 23 [(elasticsearch.elasticsearch_field).ignore = true];
+  // @gotags: fake:"skip"
+  google.protobuf.Struct a_struct_field = 24;
+  // @gotags: fake:"{number:1,2}"
+  AnEnumType an_enum = 25;
+  // @gotags: fake:"{number: 100,1000}"
+  optional int32 an_optional_int = 26;
+  // @gotags: fake:"skip"
+  optional google.protobuf.Timestamp optional_timestamp = 27;
+  // @gotags: fake:"{int32}"
+  repeated int32 repeated_int32 = 28;
+}
+
+message Thing2 {
+  option (elasticsearch.elasticsearch_opts) = {generate: true};
+  // @gotags: fake:"{uuid}"
+  optional string id = 1;
+  // @gotags: fake:"{name}"
+  string name = 2;
+}
