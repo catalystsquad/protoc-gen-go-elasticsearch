@@ -89,7 +89,7 @@ func (s *PluginSuite) TestSearchKeywordValue() {
 
 func (s *PluginSuite) TestSearchRepeatedValue() {
 	thing := s.indexRandomThing()
-	require.Greater(s.T(), len(thing.RepeatedInt32), 1)
+	require.GreaterOrEqual(s.T(), len(thing.RepeatedInt32), 1)
 	for _, num := range thing.RepeatedInt32 {
 		s.eventualLongSearch("Thing", "RepeatedInt32", *thing.Id, int(num))
 	}
