@@ -38,11 +38,11 @@ message Thing {
   // @gotags: fake:"skip"
   optional string optional_scalar_field = 18;
   // @gotags: fake:"skip"
-  Thing2 associated_thing = 19;
+  Thing2 associated_thing = 19 [(elasticsearch.elasticsearch_field).nested = true];
   // @gotags: fake:"skip"
   optional Thing2 optional_associated_thing = 20;
   // @gotags: fake:"skip"
-  repeated Thing2 repeated_messages = 21;
+  repeated Thing2 repeated_messages = 21 [(elasticsearch.elasticsearch_field).nested = true];
   // @gotags: fake:"skip"
   google.protobuf.Timestamp a_timestamp = 22;
   // @gotags: fake:"skip"
