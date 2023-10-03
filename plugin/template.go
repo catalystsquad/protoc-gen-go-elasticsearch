@@ -71,7 +71,7 @@ func IndexSync(ctx context.Context, docs []Document, refresh string) error {
 		if err != nil {
 			return err
 		}
-		if response.StatusCode != 201 {
+		if response.StatusCode != 200 && response.StatusCode != 201 {
 			bodyBytes, _ := io.ReadAll(response.Body)
 			return errorx.IllegalState.New("unexpected status code indexing with refresh: %d with body: %s", response.StatusCode, string(bodyBytes))
 		}	
