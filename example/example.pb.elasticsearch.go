@@ -388,6 +388,30 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	}
 
+	if s.AssociatedThing != nil {
+
+		nestedMetadata := Metadata{
+			Key:         lo.ToPtr("AssociatedThing"),
+			NestedValue: []interface{}{s.AssociatedThing},
+		}
+
+		doc.Metadata = append(doc.Metadata, nestedMetadata)
+
+	}
+
+	if s.RepeatedMessages != nil {
+
+		for _, message := range s.RepeatedMessages {
+			nestedMetadata := Metadata{
+				Key:         lo.ToPtr("RepeatedMessages"),
+				NestedValue: []interface{}{message},
+			}
+
+			doc.Metadata = append(doc.Metadata, nestedMetadata)
+		}
+
+	}
+
 	ATimestampMetaData := Metadata{
 		Key: lo.ToPtr("ATimestamp"),
 	}
