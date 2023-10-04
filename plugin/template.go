@@ -273,29 +273,10 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 		Metadata: []Metadata{},
 	}
 	{{ range .Fields }}
-	{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) }}
+	{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) (not (isRelationship .)) }}
 	{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
     if s.{{ .GoName}} != nil {
     {{ end }}
-	{{ if isRelationship . }}
-	{{ if .Desc.IsList }}
-	for _, message := range s.{{ .GoName }} {
-		nestedMetadata := Metadata{
-			Key: lo.ToPtr("{{ .GoName }}"),
-			NestedValue: []interface{}{message},
-		}
-
-		doc.Metadata = append(doc.Metadata, nestedMetadata)
-	}
-	{{ else }}
-	nestedMetadata := Metadata{
-		Key: lo.ToPtr("{{ .GoName }}"),
-		NestedValue: []interface{}{s.{{ .GoName }}},
-	}
-
-	doc.Metadata = append(doc.Metadata, nestedMetadata)
-	{{ end }}
-	{{ else }}
 	{{ if .Desc.IsList }}
 	for _, val := range s.{{ .GoName }} {
 		metaData := Metadata{
@@ -337,7 +318,6 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
     {{ end }}
 	doc.Metadata = append(doc.Metadata, {{ .GoName}}MetaData)
 	{{ end }}
-    {{ end }}
     {{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
 	}
     {{ end }}
