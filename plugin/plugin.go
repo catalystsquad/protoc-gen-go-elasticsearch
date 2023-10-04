@@ -43,6 +43,7 @@ var templateFuncs = map[string]any{
 	"isStructPb":       isStructPb,
 	"isBytes":          isBytes,
 	"isRelationship":   isRelationship,
+	"isNested":         isNested,
 	"maybeDereference": maybeDereference,
 	"isReference":      isReference,
 	"indexName":        getIndexName,
@@ -258,6 +259,14 @@ func isBytes(field *protogen.Field) bool {
 
 func isRelationship(field *protogen.Field) bool {
 	return field.Message != nil && !isTimestamp(field) && !isStructPb(field)
+}
+
+func isNested(field *protogen.Field) bool {
+	opts := getFieldOptions(field)
+	if opts == nil {
+		return false
+	}
+	return opts.Nested
 }
 
 func maybeDereference(field *protogen.Field) string {

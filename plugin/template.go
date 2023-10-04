@@ -273,75 +273,76 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 		Metadata: []Metadata{},
 	}
 	{{ range .Fields }}
-	{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) }}
-	{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
-    if s.{{ .GoName}} != nil {
-    {{ end }}
-	{{ if isRelationship . }}
-	{{ if .Desc.IsList }}
-	for _, message := range s.{{ .GoName }} {
-		nestedMetadata := Metadata{
-			Key: lo.ToPtr("{{ .GoName }}"),
-			NestedValue: []interface{}{message},
-		}
-
-		doc.Metadata = append(doc.Metadata, nestedMetadata)
-	}
-	{{ else }}
-	nestedMetadata := Metadata{
-		Key: lo.ToPtr("{{ .GoName }}"),
-		NestedValue: []interface{}{s.{{ .GoName }}},
-	}
-
-	doc.Metadata = append(doc.Metadata, nestedMetadata)
-	{{ end }}
-	{{ else }}
-	{{ if .Desc.IsList }}
-	for _, val := range s.{{ .GoName }} {
-		metaData := Metadata{
-		Key: lo.ToPtr("{{ .GoName }}"),
-        {{ if eq (isTimestamp .) false }}
-        StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
-        KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
-        {{ end }}
-		}
-		{{ if isNumeric . }}
-		metaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
-		metaData.DoubleValue = lo.ToPtr(float64({{ fieldValueString . }}))
-		{{ else if isBoolean . }}
-		metaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
-		{{ else if isTimestamp . }}
-		metaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
-		{{ else if .Enum }}
-		metaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
+		{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) (not (isRelationship .)) }}
+			{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
+			if s.{{ .GoName}} != nil {
+			{{ end }}
+			{{ if .Desc.IsList }}
+			for _, val := range s.{{ .GoName }} {
+				metaData := Metadata{
+				Key: lo.ToPtr("{{ .GoName }}"),
+				{{ if eq (isTimestamp .) false }}
+				StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+				KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+				{{ end }}
+				}
+				{{ if isNumeric . }}
+				metaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
+				metaData.DoubleValue = lo.ToPtr(float64({{ fieldValueString . }}))
+				{{ else if isBoolean . }}
+				metaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
+				{{ else if isTimestamp . }}
+				metaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
+				{{ else if .Enum }}
+				metaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
+				{{ end }}
+				doc.Metadata = append(doc.Metadata, metaData)
+			}
+			{{ else }}
+			{{ .GoName}}MetaData := Metadata{
+				Key: lo.ToPtr("{{ .GoName }}"),
+				{{ if eq (isTimestamp .) false }}
+				StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+				KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
+				{{ end }}
+			}
+			{{ if isNumeric . }}
+			{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
+			{{ .GoName}}MetaData.DoubleValue = lo.ToPtr(float64({{ fieldValueString . }}))
+			{{ else if isBoolean . }}
+			{{ .GoName}}MetaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
+			{{ else if isTimestamp . }}
+			{{ .GoName}}MetaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
+			{{ else if .Enum }}
+			{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
+			{{ end }}
+			doc.Metadata = append(doc.Metadata, {{ .GoName}}MetaData)
+			{{ end }}
+			{{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
+			}
+			{{ end }}
 		{{ end }}
-		doc.Metadata = append(doc.Metadata, metaData)
-	}
-	{{ else }}
-	{{ .GoName}}MetaData := Metadata{
-		Key: lo.ToPtr("{{ .GoName }}"),
-        {{ if eq (isTimestamp .) false }}
-        StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
-        KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
-        {{ end }}
-	}
-    {{ if isNumeric . }}
-	{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64({{ fieldValueString . }}))
-	{{ .GoName}}MetaData.DoubleValue = lo.ToPtr(float64({{ fieldValueString . }}))
-    {{ else if isBoolean . }}
-	{{ .GoName}}MetaData.BoolValue = lo.ToPtr({{ fieldValueString . }})
-    {{ else if isTimestamp . }}
-	{{ .GoName}}MetaData.DateValue = lo.ToPtr(s.{{ .GoName }}.AsTime().UTC().UnixMilli())
-    {{ else if .Enum }}
-	{{ .GoName}}MetaData.LongValue = lo.ToPtr(int64(s.{{ .GoName }}.Number()))
-    {{ end }}
-	doc.Metadata = append(doc.Metadata, {{ .GoName}}MetaData)
-	{{ end }}
-    {{ end }}
-    {{ if or (isReference .) (.Desc.HasOptionalKeyword) }}
-	}
-    {{ end }}
-	{{ end }}
+		{{ if and (includeField .) (not (isBytes .)) (not (isStructPb .)) (isRelationship .) (isNested .) }}
+		if s.{{ .GoName}} != nil {
+		{{ if .Desc.IsList }}
+			for _, message := range s.{{ .GoName }} {
+				nestedMetadata := Metadata{
+					Key: lo.ToPtr("{{ .GoName }}"),
+					NestedValue: []interface{}{message},
+				}
+		
+				doc.Metadata = append(doc.Metadata, nestedMetadata)
+			}
+			{{ else }}
+			nestedMetadata := Metadata{
+				Key: lo.ToPtr("{{ .GoName }}"),
+				NestedValue: []interface{}{s.{{ .GoName }}},
+			}
+		
+			doc.Metadata = append(doc.Metadata, nestedMetadata)
+			{{ end }}
+		}
+		{{ end }}
 	{{ end }}
 	docs = append(docs, doc)
 	return docs, nil
