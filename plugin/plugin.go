@@ -123,6 +123,7 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "strings"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "bytes"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "io"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "time"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/samber/lo"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esapi"})
@@ -131,7 +132,6 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/sirupsen/logrus"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/logging"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esutil"})
-	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/env"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "encoding/json"})
 }
 

@@ -5,7 +5,6 @@ import (
 	context "context"
 	json "encoding/json"
 	fmt "fmt"
-	env "github.com/catalystsquad/app-utils-go/env"
 	errorutils "github.com/catalystsquad/app-utils-go/errorutils"
 	logging "github.com/catalystsquad/app-utils-go/logging"
 	v8 "github.com/elastic/go-elasticsearch/v8"
@@ -16,6 +15,7 @@ import (
 	logrus "github.com/sirupsen/logrus"
 	io "io"
 	strings "strings"
+	time "time"
 )
 
 type Document struct {
@@ -25,46 +25,107 @@ type Document struct {
 }
 
 type Metadata struct {
-	Key          *string  `json:"key,omitempty"`
-	KeywordValue *string  `json:"keywordValue,omitempty"`
-	StringValue  *string  `json:"stringValue,omitempty"`
-	LongValue    *int64   `json:"longValue,omitempty"`
-	DoubleValue  *float64 `json:"doubleValue,omitempty"`
-	DateValue    *int64   `json:"dateValue,omitempty"`
-	BoolValue    *bool    `json:"boolValue,omitempty"`
+	Key          *string       `json:"key,omitempty"`
+	KeywordValue *string       `json:"keywordValue,omitempty"`
+	StringValue  *string       `json:"stringValue,omitempty"`
+	LongValue    *int64        `json:"longValue,omitempty"`
+	DoubleValue  *float64      `json:"doubleValue,omitempty"`
+	DateValue    *int64        `json:"dateValue,omitempty"`
+	BoolValue    *bool         `json:"boolValue,omitempty"`
+	NestedValue  []interface{} `json:"nestedValue,omitempty"`
 }
 
 const ThingEsType = "Thing"
 const Thing2EsType = "Thing2"
 
-const ElasticsearchIndexName = "data"
-
-var addresses = env.GetEnvOrDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
-var flushInterval = env.GetEnvAsDurationOrDefault("ELASTICSEARCH_FLUSH_INTERVAL", "1s")
+var ElasticsearchIndexName string
 var ElasticsearchClient *v8.Client
-var ElasticsearchBulkIndexer esutil.BulkIndexer
+var ElasticsearchBulkIndexer *esutil.BulkIndexer
 
-func init() {
-	cfg := v8.Config{
-		Addresses: strings.Split(addresses, ","),
+func GetClient() (*v8.Client, error) {
+	if ElasticsearchClient == nil {
+		return nil, errorx.IllegalState.New("client has not been initialized")
+	}
+	return ElasticsearchClient, nil
+}
+
+func GetBulkIndexer() (esutil.BulkIndexer, error) {
+	if ElasticsearchBulkIndexer == nil {
+		return nil, errorx.IllegalState.New("bulk indexer has not been initialized")
+	}
+	return *ElasticsearchBulkIndexer, nil
+}
+
+func InitializeWithClients(indexName string, client *v8.Client, bulkIndexer *esutil.BulkIndexer) error {
+	if indexName == "" {
+		return errorx.IllegalArgument.New("An index name must be provided")
+	}
+	if client == nil {
+		return errorx.IllegalArgument.New("Client cannot be nil")
+	}
+	if bulkIndexer == nil {
+		return errorx.IllegalArgument.New("Bulk indexer cannot be nil")
+	}
+
+	ElasticsearchIndexName = indexName
+	ElasticsearchClient = client
+	ElasticsearchBulkIndexer = bulkIndexer
+	return nil
+}
+
+func InitializeWithConfigs(indexName string, clientConfig *v8.Config, bulkIndexerConfig *esutil.BulkIndexerConfig) error {
+	if indexName == "" {
+		return errorx.IllegalArgument.New("An index name must be provided")
+	}
+	if clientConfig == nil {
+		return errorx.IllegalArgument.New("Client config cannot be nil")
+	}
+	if bulkIndexerConfig == nil {
+		return errorx.IllegalArgument.New("Bulk indexer config cannot be nil")
+	}
+	if bulkIndexerConfig.Index != indexName {
+		return errorx.IllegalArgument.New("bulk indexer config index must match given index name. given index name: %s, bulk indexer config index name: %s", ElasticsearchIndexName, bulkIndexerConfig.Index)
 	}
 	var err error
-	ElasticsearchClient, err = v8.NewClient(cfg)
-	errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"addresses": addresses}), "error creating elasticsearch client", err)
+	ElasticsearchIndexName = indexName
+	ElasticsearchClient, err = v8.NewClient(*clientConfig)
 	if err != nil {
-		logging.Log.Info("elasticsearch client initialized")
+		errorutils.LogOnErr(nil, "error creating elasticsearch client", err)
+		return err
 	}
-	if err == nil {
-		ElasticsearchBulkIndexer, err = esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
-			Index:         ElasticsearchIndexName,
-			Client:        ElasticsearchClient,
-			FlushInterval: flushInterval,
-		})
-		errorutils.LogOnErr(logging.Log.WithFields(logrus.Fields{"addresses": addresses}), "error creating elasticsearch bulk indexer", err)
-		if err == nil {
-			logging.Log.Info("elasticsearch bulk indexer initialized")
-		}
+	bulkIndexer, err := esutil.NewBulkIndexer(*bulkIndexerConfig)
+	if err != nil {
+		errorutils.LogOnErr(nil, "error creating elasticsearch bulk indexer", err)
 	}
+	ElasticsearchBulkIndexer = &bulkIndexer
+	return nil
+}
+
+func Initialize(indexName, refresh string, addresses []string, numWorkers, flushBytes int, flushInterval, timeout time.Duration) error {
+	clientConvig := &v8.Config{Addresses: addresses}
+	bulkIndexerConfig := &esutil.BulkIndexerConfig{
+		Index:         indexName,
+		NumWorkers:    numWorkers,
+		FlushBytes:    flushBytes,
+		FlushInterval: flushInterval,
+		Refresh:       refresh,
+		Timeout:       timeout,
+		OnError: func(ctx context.Context, err error) {
+			errorutils.LogOnErr(nil, "error indexing item", err)
+		},
+		OnFlushStart: func(ctx context.Context) context.Context {
+			logging.Log.Info("bulk indexer starting flush")
+			return ctx
+		},
+		OnFlushEnd: func(ctx context.Context) {
+			logging.Log.Info("bulk indexer flush complete")
+		},
+	}
+	return InitializeWithConfigs(indexName, clientConvig, bulkIndexerConfig)
+}
+
+func InitializeWithDefaults(addresses []string) error {
+	return Initialize("data", "false", addresses, 2, 5000000, 5*time.Second, 1*time.Minute)
 }
 
 func IndexSync(ctx context.Context, docs []Document, refresh string) error {
@@ -80,7 +141,11 @@ func IndexSync(ctx context.Context, docs []Document, refresh string) error {
 			Body:       bytes.NewReader(data),
 			Refresh:    refresh,
 		}
-		response, err := req.Do(ctx, ElasticsearchClient)
+		client, err := GetClient()
+		if err != nil {
+			return err
+		}
+		response, err := req.Do(ctx, client)
 		if err != nil {
 			return err
 		}
@@ -122,7 +187,7 @@ func createIndex(client *v8.Client) error {
 }
 
 func putMappings(client *v8.Client) error {
-	settings := strings.NewReader("{\"properties\":{\"id\":{\"type\":\"keyword\"},\"type\":{\"type\":\"keyword\"},\"metadata\":{\"type\":\"nested\",\"properties\":{\"key\":{\"type\":\"keyword\"},\"keywordValue\":{\"type\":\"keyword\"},\"stringValue\":{\"type\":\"text\"},\"longValue\":{\"type\":\"long\"},\"doubleValue\":{\"type\":\"double\"},\"dateValue\":{\"type\":\"date\"},\"boolValue\":{\"type\":\"boolean\"}}}}}")
+	settings := strings.NewReader("{\"properties\":{\"id\":{\"type\":\"keyword\"},\"type\":{\"type\":\"keyword\"},\"metadata\":{\"type\":\"nested\",\"properties\":{\"key\":{\"type\":\"keyword\"},\"keywordValue\":{\"type\":\"keyword\"},\"stringValue\":{\"type\":\"text\"},\"longValue\":{\"type\":\"long\"},\"doubleValue\":{\"type\":\"double\"},\"dateValue\":{\"type\":\"date\"},\"boolValue\":{\"type\":\"boolean\"},\"nestedValue\":{\"type\":\"nested\"}}}}}")
 	req := esapi.IndicesPutMappingRequest{
 		Index: []string{ElasticsearchIndexName},
 		Body:  settings,
@@ -188,7 +253,11 @@ func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onS
 	if onFailure != nil {
 		item.OnFailure = onFailure
 	}
-	err := ElasticsearchBulkIndexer.Add(ctx, item)
+	bulkIndexer, err := GetBulkIndexer()
+	if err != nil {
+		return err
+	}
+	err = bulkIndexer.Add(ctx, item)
 	errorutils.LogOnErr(nil, "error adding item to bulk indexer", err)
 	return err
 }
@@ -321,95 +390,35 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	if s.AssociatedThing != nil {
 
-		doc := Document{
-			Type: "joinRecord",
-			Metadata: []Metadata{
-				{
-					Key:          lo.ToPtr("fieldName"),
-					KeywordValue: lo.ToPtr("AssociatedThing"),
-				},
-				{
-					Key:          lo.ToPtr("parentType"),
-					KeywordValue: lo.ToPtr("Thing"),
-				},
-				{
-					Key:          lo.ToPtr("childType"),
-					KeywordValue: lo.ToPtr("Thing2"),
-				},
-				{
-					Key:          lo.ToPtr("parentId"),
-					KeywordValue: s.Id,
-				},
-				{
-					Key:          lo.ToPtr("childId"),
-					KeywordValue: s.AssociatedThing.Id,
-				},
-			},
+		nestedMetadata := Metadata{
+			Key:         lo.ToPtr("AssociatedThing"),
+			NestedValue: []interface{}{s.AssociatedThing},
 		}
-		docs = append(docs, doc)
+
+		doc.Metadata = append(doc.Metadata, nestedMetadata)
 
 	}
 
 	if s.OptionalAssociatedThing != nil {
 
-		doc := Document{
-			Type: "joinRecord",
-			Metadata: []Metadata{
-				{
-					Key:          lo.ToPtr("fieldName"),
-					KeywordValue: lo.ToPtr("OptionalAssociatedThing"),
-				},
-				{
-					Key:          lo.ToPtr("parentType"),
-					KeywordValue: lo.ToPtr("Thing"),
-				},
-				{
-					Key:          lo.ToPtr("childType"),
-					KeywordValue: lo.ToPtr("Thing2"),
-				},
-				{
-					Key:          lo.ToPtr("parentId"),
-					KeywordValue: s.Id,
-				},
-				{
-					Key:          lo.ToPtr("childId"),
-					KeywordValue: s.OptionalAssociatedThing.Id,
-				},
-			},
+		nestedMetadata := Metadata{
+			Key:         lo.ToPtr("OptionalAssociatedThing"),
+			NestedValue: []interface{}{s.OptionalAssociatedThing},
 		}
-		docs = append(docs, doc)
+
+		doc.Metadata = append(doc.Metadata, nestedMetadata)
 
 	}
 
 	if s.RepeatedMessages != nil {
 
 		for _, message := range s.RepeatedMessages {
-			doc := Document{
-				Type: "joinRecord",
-				Metadata: []Metadata{
-					{
-						Key:          lo.ToPtr("fieldName"),
-						KeywordValue: lo.ToPtr("RepeatedMessages"),
-					},
-					{
-						Key:          lo.ToPtr("parentType"),
-						KeywordValue: lo.ToPtr("Thing"),
-					},
-					{
-						Key:          lo.ToPtr("childType"),
-						KeywordValue: lo.ToPtr("Thing2"),
-					},
-					{
-						Key:          lo.ToPtr("parentId"),
-						KeywordValue: s.Id,
-					},
-					{
-						Key:          lo.ToPtr("childId"),
-						KeywordValue: message.Id,
-					},
-				},
+			nestedMetadata := Metadata{
+				Key:         lo.ToPtr("RepeatedMessages"),
+				NestedValue: []interface{}{message},
 			}
-			docs = append(docs, doc)
+
+			doc.Metadata = append(doc.Metadata, nestedMetadata)
 		}
 
 	}
@@ -480,10 +489,6 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 }
 
 func (s *Thing) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -492,10 +497,6 @@ func (s *Thing) IndexAsync(ctx context.Context, onSuccess func(ctx context.Conte
 }
 
 func (s *Thing) IndexSyncWithRefresh(ctx context.Context) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -504,10 +505,6 @@ func (s *Thing) IndexSyncWithRefresh(ctx context.Context) error {
 }
 
 func (s *Thing) IndexSync(ctx context.Context, refresh string) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -515,71 +512,17 @@ func (s *Thing) IndexSync(ctx context.Context, refresh string) error {
 	return IndexSync(ctx, docs, refresh)
 }
 
-func (s *Thing) Clear(ctx context.Context) error {
-	req := esapi.DeleteByQueryRequest{
-		Index: []string{ElasticsearchIndexName},
-		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
+func (s *Thing) Delete(ctx context.Context, refresh string) error {
+	req := esapi.DeleteRequest{
+		Index:      ElasticsearchIndexName,
+		DocumentID: *s.Id,
+		Refresh:    refresh,
 	}
-	response, err := req.Do(ctx, ElasticsearchClient)
+	client, err := GetClient()
 	if err != nil {
 		return err
 	}
-	if response.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(response.Body)
-		return errorx.IllegalState.New("unexpected status code clearing Thing: %d with body: %s", response.StatusCode, string(bodyBytes))
-	}
-	return nil
-}
-
-func (s *Thing) GetClearQuery() string {
-	return fmt.Sprintf(`
-{
-	"query": {
-    	"bool": {
-			"must": [
-				{
-					"term": {
-						"type": "joinRecord"
-					}
-				},
-				{
-					"nested": {
-						"path": "metadata",
-						"query": {
-							"bool": {
-								"must": [
-									{ "match": { "metadata.key": "parentType" } },
-									{ "match": { "metadata.keywordValue": "Thing" } }
-								]
-							}
-						}
-					}
-				},
-				{
-					"nested": {
-						"path": "metadata",
-						"query": {
-							"bool": {
-								"must": [
-									{ "match": { "metadata.key": "parentId" } },
-									{ "match": { "metadata.keywordValue": "%s" } }
-								]
-							}
-						}
-					}
-				}
-			]
-		}
-	}
-}`, *s.Id)
-}
-
-func (s *Thing) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	req := esapi.DeleteByQueryRequest{
-		Index: []string{ElasticsearchIndexName},
-		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
-	}
-	response, err := req.Do(ctx, ElasticsearchClient)
+	response, err := req.Do(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -590,80 +533,8 @@ func (s *Thing) Delete(ctx context.Context, onSuccess func(ctx context.Context, 
 	return nil
 }
 
-func (s *Thing) GetDeleteQuery() string {
-	return fmt.Sprintf(`
-{
-  "query": {
-    "bool": {
-      "should": [
-        {
-          "term": {
-            "id": "%s"
-          }
-        },
-        {
-          "bool": {
-            "must": [
-              {
-                "term": {
-                  "type": "joinRecord"
-                }
-              },
-              {
-                "bool": {
-                  "should": [
-                    {
-                      "nested": {
-                        "path": "metadata",
-                        "query": {
-                          "bool": {
-                            "must": [
-                              {
-                                "match": {
-                                  "metadata.key": "parentId"
-                                }
-                              },
-                              {
-                                "match": {
-                                  "metadata.keywordValue": "%s"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "nested": {
-                        "path": "metadata",
-                        "query": {
-                          "bool": {
-                            "must": [
-                              {
-                                "match": {
-                                  "metadata.key": "childId"
-                                }
-                              },
-                              {
-                                "match": {
-                                  "metadata.keywordValue": "%s"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
-}`, *s.Id, *s.Id, *s.Id)
+func (s *Thing) DeleteWithRefresh(ctx context.Context) error {
+	return s.Delete(ctx, "wait_for")
 }
 
 func (s *Thing2) ToEsDocuments() ([]Document, error) {
@@ -701,10 +572,6 @@ func (s *Thing2) ToEsDocuments() ([]Document, error) {
 }
 
 func (s *Thing2) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -713,10 +580,6 @@ func (s *Thing2) IndexAsync(ctx context.Context, onSuccess func(ctx context.Cont
 }
 
 func (s *Thing2) IndexSyncWithRefresh(ctx context.Context) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -725,10 +588,6 @@ func (s *Thing2) IndexSyncWithRefresh(ctx context.Context) error {
 }
 
 func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
-	err := s.Clear(ctx)
-	if err != nil {
-		return err
-	}
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -736,71 +595,17 @@ func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
 	return IndexSync(ctx, docs, refresh)
 }
 
-func (s *Thing2) Clear(ctx context.Context) error {
-	req := esapi.DeleteByQueryRequest{
-		Index: []string{ElasticsearchIndexName},
-		Body:  bytes.NewReader([]byte(s.GetClearQuery())),
+func (s *Thing2) Delete(ctx context.Context, refresh string) error {
+	req := esapi.DeleteRequest{
+		Index:      ElasticsearchIndexName,
+		DocumentID: *s.Id,
+		Refresh:    refresh,
 	}
-	response, err := req.Do(ctx, ElasticsearchClient)
+	client, err := GetClient()
 	if err != nil {
 		return err
 	}
-	if response.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(response.Body)
-		return errorx.IllegalState.New("unexpected status code clearing Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
-	}
-	return nil
-}
-
-func (s *Thing2) GetClearQuery() string {
-	return fmt.Sprintf(`
-{
-	"query": {
-    	"bool": {
-			"must": [
-				{
-					"term": {
-						"type": "joinRecord"
-					}
-				},
-				{
-					"nested": {
-						"path": "metadata",
-						"query": {
-							"bool": {
-								"must": [
-									{ "match": { "metadata.key": "parentType" } },
-									{ "match": { "metadata.keywordValue": "Thing2" } }
-								]
-							}
-						}
-					}
-				},
-				{
-					"nested": {
-						"path": "metadata",
-						"query": {
-							"bool": {
-								"must": [
-									{ "match": { "metadata.key": "parentId" } },
-									{ "match": { "metadata.keywordValue": "%s" } }
-								]
-							}
-						}
-					}
-				}
-			]
-		}
-	}
-}`, *s.Id)
-}
-
-func (s *Thing2) Delete(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	req := esapi.DeleteByQueryRequest{
-		Index: []string{ElasticsearchIndexName},
-		Body:  bytes.NewReader([]byte(s.GetDeleteQuery())),
-	}
-	response, err := req.Do(ctx, ElasticsearchClient)
+	response, err := req.Do(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -811,78 +616,6 @@ func (s *Thing2) Delete(ctx context.Context, onSuccess func(ctx context.Context,
 	return nil
 }
 
-func (s *Thing2) GetDeleteQuery() string {
-	return fmt.Sprintf(`
-{
-  "query": {
-    "bool": {
-      "should": [
-        {
-          "term": {
-            "id": "%s"
-          }
-        },
-        {
-          "bool": {
-            "must": [
-              {
-                "term": {
-                  "type": "joinRecord"
-                }
-              },
-              {
-                "bool": {
-                  "should": [
-                    {
-                      "nested": {
-                        "path": "metadata",
-                        "query": {
-                          "bool": {
-                            "must": [
-                              {
-                                "match": {
-                                  "metadata.key": "parentId"
-                                }
-                              },
-                              {
-                                "match": {
-                                  "metadata.keywordValue": "%s"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "nested": {
-                        "path": "metadata",
-                        "query": {
-                          "bool": {
-                            "must": [
-                              {
-                                "match": {
-                                  "metadata.key": "childId"
-                                }
-                              },
-                              {
-                                "match": {
-                                  "metadata.keywordValue": "%s"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
-}`, *s.Id, *s.Id, *s.Id)
+func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
+	return s.Delete(ctx, "wait_for")
 }

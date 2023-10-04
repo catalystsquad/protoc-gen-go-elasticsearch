@@ -6,7 +6,6 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	example_example "github.com/catalystsquad/protoc-gen-go-elasticsearch/example"
 	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/elastic"
 	"github.com/stretchr/testify/require"
@@ -29,9 +28,11 @@ func TestPluginSuite(t *testing.T) {
 }
 
 func (s *PluginSuite) SetupSuite() {
+	err := example_example.InitializeWithDefaults([]string{"http://localhost:9200"})
+	require.NoError(s.T(), err)
 	s.T().Parallel()
 	s.startElasticsearch(s.T())
-	err := example_example.EnsureIndex(s.client)
+	err = example_example.EnsureIndex(s.client)
 	require.NoError(s.T(), err)
 }
 
@@ -95,49 +96,22 @@ func (s *PluginSuite) TestSearchRepeatedValue() {
 	}
 }
 
-func (s *PluginSuite) TestSearchRelatedObject() {
+func (s *PluginSuite) TestSearchNestedObject() {
 	thing := s.indexRandomThingWithRelationships()
 	// search for associated thing exact match
-	s.eventualJoinRecordSearch("AssociatedThing", "Thing", "Thing2", *thing.Id, *thing.AssociatedThing.Id)
+	s.eventualNestedSearch("Thing", "AssociatedThing", "name", thing.AssociatedThing.Name, *thing.Id)
 	//// search for repeated relationship objects
-	s.eventualJoinRecordSearch("RepeatedMessages", "Thing", "Thing2", *thing.Id, *thing.RepeatedMessages[0].Id)
-	s.eventualJoinRecordSearch("RepeatedMessages", "Thing", "Thing2", *thing.Id, *thing.RepeatedMessages[1].Id)
-}
-
-func (s *PluginSuite) TestClear() {
-	thing := s.indexRandomThingWithRelationships()
-	// search for associated thing exact match so we know it was indexed
-	s.eventualJoinRecordSearch("AssociatedThing", "Thing", "Thing2", *thing.Id, *thing.AssociatedThing.Id)
-	err := thing.Clear(context.Background())
-	require.NoError(s.T(), err)
-	// verify we can still find thing, and the associated thing
-	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
-	s.eventualKeywordSearch("Thing2", "Id", *thing.AssociatedThing.Id, *thing.AssociatedThing.Id)
-	// verify there are no joinRecords
-	result := s.joinRecordSearch("AssociatedThing", "Thing", "Thing2", *thing.Id, *thing.AssociatedThing.Id)
-	require.False(s.T(), strings.Contains(result, *thing.Id))
-	require.False(s.T(), strings.Contains(result, *thing.AssociatedThing.Id))
+	s.eventualNestedSearch("Thing", "RepeatedMessages", "name", thing.RepeatedMessages[0].Name, *thing.Id)
+	s.eventualNestedSearch("Thing", "RepeatedMessages", "name", thing.RepeatedMessages[1].Name, *thing.Id)
 }
 
 func (s *PluginSuite) TestDelete() {
-	thing := s.indexRandomThingWithRelationships()
-	// search for thing, joinRecords, joined object so we know they were all indexed
+	thing := s.indexRandomThing()
 	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
-	s.eventualKeywordSearch("Thing2", "Id", *thing.AssociatedThing.Id, *thing.AssociatedThing.Id)
-	s.eventualJoinRecordSearch("AssociatedThing", "Thing", "Thing2", *thing.Id, *thing.AssociatedThing.Id)
-	err := thing.Delete(context.Background(), func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem) {
-		// Using success func because it's deterministic rather than using waits or eventual searches
-		// ensure thing is deleted
-		result := s.keywordSearch("Thing", "Id", *thing.Id)
-		require.False(s.T(), strings.Contains(result, *thing.Id))
-		// ensure join records are deleted
-		result = s.joinRecordSearch("AssociatedThing", "Thing", "Thing2", *thing.Id, *thing.AssociatedThing.Id)
-		require.False(s.T(), strings.Contains(result, *thing.Id))
-		// ensure thing2 remains
-		result = s.keywordSearch("Thing2", "Id", *thing.AssociatedThing.Id)
-		require.True(s.T(), strings.Contains(result, *thing.AssociatedThing.Id))
-	}, nil)
+	err := thing.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
+	response := s.keywordSearch("Thing", "Id", *thing.Id)
+	require.NotContains(s.T(), response, *thing.Id)
 }
 
 func (s *PluginSuite) TestIndexSyncWithRefresh() {
@@ -345,86 +319,59 @@ func getKeywordQuery(theType, key, query string) string {
 }`, theType, key, query)
 }
 
-func getJoinRecordQuery(fieldName, parentType, childType, parentId, childId string) string {
+func getNestedStringQuery(theType, key, nestedFieldName, query string) string {
 	return fmt.Sprintf(`
 {
-    "query": {
-        "bool": {
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "term": {
+            "type": "%s"
+          }
+        },
+        {
+          "bool": {
             "must": [
-                {
-                    "term": {
-                        "type": "joinRecord"
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "metadata",
-                        "query": {
-                            "bool": {
-                                "must": [
-									{ "match": { "metadata.key": "fieldName" } },
-                                    { "match": { "metadata.keywordValue": "%s" } }
-                                ]
-                            }
+              {
+                "nested": {
+                  "path": "metadata",
+                  "query": {
+                    "bool": {
+                      "must": [
+                        {
+                          "match": {
+                            "metadata.key": "%s"
+                          }
                         }
+                      ]
                     }
-                },
-                {
-                    "nested": {
-                        "path": "metadata",
-                        "query": {
-                            "bool": {
-                                "must": [
-									{ "match": { "metadata.key": "parentType" } },
-                                    { "match": { "metadata.keywordValue": "%s" } }
-                                ]
-                            }
-                        }
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "metadata",
-                        "query": {
-                            "bool": {
-                                "must": [
-									{ "match": { "metadata.key": "childType" } },
-                                    { "match": { "metadata.keywordValue": "%s" } }
-                                ]
-                            }
-                        }
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "metadata",
-                        "query": {
-                            "bool": {
-                                "must": [
-									{ "match": { "metadata.key": "parentId" } },
-                                    { "match": { "metadata.keywordValue": "%s" } }
-                                ]
-                            }
-                        }
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "metadata",
-                        "query": {
-                            "bool": {
-                                "must": [
-									{ "match": { "metadata.key": "childId" } },
-                                    { "match": { "metadata.keywordValue": "%s" } }
-                                ]
-                            }
-                        }
-                    }
+                  }
                 }
+              },
+              {
+                "nested": {
+                  "path": "metadata.nestedValue",
+                  "query": {
+                    "bool": {
+                      "must": [
+                        {
+                          "match": {
+                            "metadata.nestedValue.%s": "%s"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
             ]
+          }
         }
+      ]
     }
-}`, fieldName, parentType, childType, parentId, childId)
+  }
+}`, theType, key, nestedFieldName, query)
 }
 
 func (s *PluginSuite) indexRandomThing() *example_example.Thing {
@@ -466,12 +413,12 @@ func (s *PluginSuite) generateRandomThing2() *example_example.Thing2 {
 }
 
 func (s *PluginSuite) indexThing(thing *example_example.Thing) {
-	err := thing.IndexAsync(context.Background(), nil, nil)
+	err := thing.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 }
 
 func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
-	err := thing2.IndexAsync(context.Background(), nil, nil)
+	err := thing2.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 }
 
@@ -515,15 +462,25 @@ func (s *PluginSuite) keywordSearch(theType, key, query string) string {
 	return s.search(queryString)
 }
 
-func (s *PluginSuite) eventualJoinRecordSearch(fieldName, parentType, childType, parentId, childId string) {
-	queryString := getJoinRecordQuery(fieldName, parentType, childType, parentId, childId)
-	s.eventualSearch(queryString, parentId)
+func (s *PluginSuite) eventualNestedSearch(theType, key, nestedFieldName, query, expectedId string) {
+	queryString := getNestedStringQuery(theType, key, nestedFieldName, query)
+	s.eventualSearch(queryString, expectedId)
 }
 
-func (s *PluginSuite) joinRecordSearch(fieldName, parentType, childType, parentId, childId string) string {
-	queryString := getJoinRecordQuery(fieldName, parentType, childType, parentId, childId)
+func (s *PluginSuite) nestedSearch(theType, key, nestedFieldName, query string) string {
+	queryString := getNestedStringQuery(theType, key, nestedFieldName, query)
 	return s.search(queryString)
 }
+
+//func (s *PluginSuite) eventualNestedSearch(fieldName, parentType, childType, parentId, childId string) {
+//	queryString := getNestedQuery(fieldName, parentType, childType, parentId, childId)
+//	s.eventualSearch(queryString, parentId)
+//}
+//
+//func (s *PluginSuite) nestedSearch(fieldName, parentType, childType, parentId, childId string) string {
+//	queryString := getNestedQuery(fieldName, parentType, childType, parentId, childId)
+//	return s.search(queryString)
+//}
 
 func (s *PluginSuite) eventualDateSearch(theType, key, expectedId string, query time.Time) {
 	queryString := getDateQuery(theType, key, query)

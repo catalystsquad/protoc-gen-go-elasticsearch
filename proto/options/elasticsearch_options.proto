@@ -34,4 +34,5 @@ extend google.protobuf.FieldOptions {
 message elasticsearchFieldOptions {
   bool ignore = 2;
   bool keyword = 3;
+  bool nested = 4;
 }
