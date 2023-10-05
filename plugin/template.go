@@ -28,7 +28,7 @@ const {{ .Desc.Name}}EsType = "{{ .Desc.Name }}"
 
 var ElasticsearchIndexName string
 var ElasticsearchClient *v8.Client
-var ElasticsearchBulkIndexer *esutil.BulkIndexer
+var ElasticsearchBulkIndexer esutil.BulkIndexer
 
 func GetClient() (*v8.Client, error) {
 	if ElasticsearchClient == nil {
@@ -37,22 +37,12 @@ func GetClient() (*v8.Client, error) {
 	return ElasticsearchClient, nil
 }
 
-func GetBulkIndexer() (esutil.BulkIndexer, error) {
-	if ElasticsearchBulkIndexer == nil {
-		return nil, errorx.IllegalState.New("bulk indexer has not been initialized")
-	}
-	return *ElasticsearchBulkIndexer, nil
-}
-
-func InitializeWithClients(indexName string, client *v8.Client, bulkIndexer *esutil.BulkIndexer) error {
+func InitializeWithClients(indexName string, client *v8.Client, bulkIndexer esutil.BulkIndexer) error {
 	if indexName == "" {
 		return errorx.IllegalArgument.New("An index name must be provided")
 	}
 	if client == nil {
 		return errorx.IllegalArgument.New("Client cannot be nil")
-	}
-	if bulkIndexer == nil {
-		return errorx.IllegalArgument.New("Bulk indexer cannot be nil")
 	}
 
 	ElasticsearchIndexName = indexName
@@ -85,7 +75,7 @@ func InitializeWithConfigs(indexName string, clientConfig *v8.Config, bulkIndexe
 	if err != nil {
 		errorutils.LogOnErr(nil, "error creating elasticsearch bulk indexer", err)
 	}
-	ElasticsearchBulkIndexer = &bulkIndexer
+	ElasticsearchBulkIndexer = bulkIndexer
 	return nil
 }
 
@@ -99,14 +89,7 @@ func Initialize(indexName, refresh string, addresses []string, numWorkers, flush
 		Refresh:       refresh,
 		Timeout:       timeout,
 		OnError: func(ctx context.Context, err error) {
-			errorutils.LogOnErr(nil, "error indexing item", err)
-		},
-		OnFlushStart: func(ctx context.Context) context.Context {
-			logging.Log.Info("bulk indexer starting flush")
-			return ctx
-		},
-		OnFlushEnd: func(ctx context.Context) {
-			logging.Log.Info("bulk indexer flush complete")
+			errorutils.LogOnErr(nil, "error encountered in bulk indexer", err)
 		},
 	}
 	return InitializeWithConfigs(indexName, clientConvig, bulkIndexerConfig)
@@ -241,11 +224,7 @@ func QueueBulkIndexItem(ctx context.Context, id, action string, body []byte, onS
 	if onFailure != nil {
 		item.OnFailure = onFailure
 	}
-	bulkIndexer, err := GetBulkIndexer()
-	if err != nil {
-		return err
-	}
-	err = bulkIndexer.Add(ctx, item)
+	err := ElasticsearchBulkIndexer.Add(ctx, item)
 	errorutils.LogOnErr(nil, "error adding item to bulk indexer", err)
 	return err
 }
