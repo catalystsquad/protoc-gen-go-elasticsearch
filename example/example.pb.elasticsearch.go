@@ -515,7 +515,7 @@ func (s *Thing) Delete(ctx context.Context, refresh string) error {
 	if err != nil {
 		return err
 	}
-	if response.StatusCode != 200 {
+	if response.StatusCode != 200 && response.StatusCode != 404 {
 		bodyBytes, _ := io.ReadAll(response.Body)
 		return errorx.IllegalState.New("unexpected status code deleting Thing: %d with body: %s", response.StatusCode, string(bodyBytes))
 	}
@@ -598,7 +598,7 @@ func (s *Thing2) Delete(ctx context.Context, refresh string) error {
 	if err != nil {
 		return err
 	}
-	if response.StatusCode != 200 {
+	if response.StatusCode != 200 && response.StatusCode != 404 {
 		bodyBytes, _ := io.ReadAll(response.Body)
 		return errorx.IllegalState.New("unexpected status code deleting Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
 	}
