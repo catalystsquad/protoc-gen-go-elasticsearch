@@ -99,10 +99,10 @@ func (s *PluginSuite) TestSearchRepeatedValue() {
 func (s *PluginSuite) TestSearchNestedObject() {
 	thing := s.indexRandomThingWithRelationships()
 	// search for associated thing exact match
-	s.eventualNestedSearch("Thing", "AssociatedThing", "name", thing.AssociatedThing.Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", thing.AssociatedThing.Name, *thing.Id)
 	//// search for repeated relationship objects
-	s.eventualNestedSearch("Thing", "RepeatedMessages", "name", thing.RepeatedMessages[0].Name, *thing.Id)
-	s.eventualNestedSearch("Thing", "RepeatedMessages", "name", thing.RepeatedMessages[1].Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[0].Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[1].Name, *thing.Id)
 }
 
 func (s *PluginSuite) TestDelete() {
@@ -319,61 +319,6 @@ func getKeywordQuery(theType, key, query string) string {
 }`, theType, key, query)
 }
 
-func getNestedStringQuery(theType, key, nestedFieldName, query string) string {
-	return fmt.Sprintf(`
-{
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "term": {
-            "type": "%s"
-          }
-        },
-        {
-          "bool": {
-            "must": [
-              {
-                "nested": {
-                  "path": "metadata",
-                  "query": {
-                    "bool": {
-                      "must": [
-                        {
-                          "match": {
-                            "metadata.key": "%s"
-                          }
-                        }
-                      ]
-                    }
-                  }
-                }
-              },
-              {
-                "nested": {
-                  "path": "metadata.nestedValue",
-                  "query": {
-                    "bool": {
-                      "must": [
-                        {
-                          "match": {
-                            "metadata.nestedValue.%s": "%s"
-                          }
-                        }
-                      ]
-                    }
-                  }
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
-}`, theType, key, nestedFieldName, query)
-}
-
 func (s *PluginSuite) indexRandomThing() *example_example.Thing {
 	thing := s.generateRandomThing()
 	s.indexThing(thing)
@@ -461,26 +406,6 @@ func (s *PluginSuite) keywordSearch(theType, key, query string) string {
 	queryString := getKeywordQuery(theType, key, query)
 	return s.search(queryString)
 }
-
-func (s *PluginSuite) eventualNestedSearch(theType, key, nestedFieldName, query, expectedId string) {
-	queryString := getNestedStringQuery(theType, key, nestedFieldName, query)
-	s.eventualSearch(queryString, expectedId)
-}
-
-func (s *PluginSuite) nestedSearch(theType, key, nestedFieldName, query string) string {
-	queryString := getNestedStringQuery(theType, key, nestedFieldName, query)
-	return s.search(queryString)
-}
-
-//func (s *PluginSuite) eventualNestedSearch(fieldName, parentType, childType, parentId, childId string) {
-//	queryString := getNestedQuery(fieldName, parentType, childType, parentId, childId)
-//	s.eventualSearch(queryString, parentId)
-//}
-//
-//func (s *PluginSuite) nestedSearch(fieldName, parentType, childType, parentId, childId string) string {
-//	queryString := getNestedQuery(fieldName, parentType, childType, parentId, childId)
-//	return s.search(queryString)
-//}
 
 func (s *PluginSuite) eventualDateSearch(theType, key, expectedId string, query time.Time) {
 	queryString := getDateQuery(theType, key, query)
