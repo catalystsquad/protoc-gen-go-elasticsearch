@@ -25,14 +25,13 @@ type Document struct {
 }
 
 type Metadata struct {
-	Key          *string       `json:"key,omitempty"`
-	KeywordValue *string       `json:"keywordValue,omitempty"`
-	StringValue  *string       `json:"stringValue,omitempty"`
-	LongValue    *int64        `json:"longValue,omitempty"`
-	DoubleValue  *float64      `json:"doubleValue,omitempty"`
-	DateValue    *int64        `json:"dateValue,omitempty"`
-	BoolValue    *bool         `json:"boolValue,omitempty"`
-	NestedValue  []interface{} `json:"nestedValue,omitempty"`
+	Key          *string  `json:"key,omitempty"`
+	KeywordValue *string  `json:"keywordValue,omitempty"`
+	StringValue  *string  `json:"stringValue,omitempty"`
+	LongValue    *int64   `json:"longValue,omitempty"`
+	DoubleValue  *float64 `json:"doubleValue,omitempty"`
+	DateValue    *int64   `json:"dateValue,omitempty"`
+	BoolValue    *bool    `json:"boolValue,omitempty"`
 }
 
 const ThingEsType = "Thing"
@@ -170,7 +169,7 @@ func createIndex(client *v8.Client) error {
 }
 
 func putMappings(client *v8.Client) error {
-	settings := strings.NewReader("{\"properties\":{\"id\":{\"type\":\"keyword\"},\"type\":{\"type\":\"keyword\"},\"metadata\":{\"type\":\"nested\",\"properties\":{\"key\":{\"type\":\"keyword\"},\"keywordValue\":{\"type\":\"keyword\"},\"stringValue\":{\"type\":\"text\"},\"longValue\":{\"type\":\"long\"},\"doubleValue\":{\"type\":\"double\"},\"dateValue\":{\"type\":\"date\"},\"boolValue\":{\"type\":\"boolean\"},\"nestedValue\":{\"type\":\"nested\"}}}}}")
+	settings := strings.NewReader("{\"properties\":{\"id\":{\"type\":\"keyword\"},\"type\":{\"type\":\"keyword\"},\"metadata\":{\"type\":\"nested\",\"properties\":{\"key\":{\"type\":\"keyword\"},\"keywordValue\":{\"type\":\"keyword\"},\"stringValue\":{\"type\":\"text\"},\"longValue\":{\"type\":\"long\"},\"doubleValue\":{\"type\":\"double\"},\"dateValue\":{\"type\":\"date\"},\"boolValue\":{\"type\":\"boolean\"}}}}}")
 	req := esapi.IndicesPutMappingRequest{
 		Index: []string{ElasticsearchIndexName},
 		Body:  settings,
@@ -369,24 +368,32 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	if s.AssociatedThing != nil {
 
-		nestedMetadata := Metadata{
-			Key:         lo.ToPtr("AssociatedThing"),
-			NestedValue: []interface{}{s.AssociatedThing},
+		AssociatedThingDocs, err := s.AssociatedThing.ToEsDocuments()
+		if err != nil {
+			return nil, err
 		}
-
-		doc.Metadata = append(doc.Metadata, nestedMetadata)
+		for _, AssociatedThingDoc := range AssociatedThingDocs {
+			for _, metadata := range AssociatedThingDoc.Metadata {
+				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThing%s", *metadata.Key))
+				doc.Metadata = append(doc.Metadata, metadata)
+			}
+		}
 
 	}
 
 	if s.RepeatedMessages != nil {
 
 		for _, message := range s.RepeatedMessages {
-			nestedMetadata := Metadata{
-				Key:         lo.ToPtr("RepeatedMessages"),
-				NestedValue: []interface{}{message},
+			messageDocs, err := message.ToEsDocuments()
+			if err != nil {
+				return nil, err
 			}
-
-			doc.Metadata = append(doc.Metadata, nestedMetadata)
+			for _, messageDoc := range messageDocs {
+				for _, metadata := range messageDoc.Metadata {
+					metadata.Key = lo.ToPtr(fmt.Sprintf("RepeatedMessages%s", *metadata.Key))
+					doc.Metadata = append(doc.Metadata, metadata)
+				}
+			}
 		}
 
 	}
