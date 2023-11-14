@@ -589,9 +589,9 @@ func (s *Thing) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-type Things []*Thing
+type ThingBulkEsModel []*Thing
 
-func (s *Things) ToEsDocuments() ([]Document, error) {
+func (s *ThingBulkEsModel) ToEsDocuments() ([]Document, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -606,7 +606,7 @@ func (s *Things) ToEsDocuments() ([]Document, error) {
 	return docs, nil
 }
 
-func (s *Things) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *ThingBulkEsModel) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -614,7 +614,7 @@ func (s *Things) IndexAsync(ctx context.Context, onSuccess func(ctx context.Cont
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *Things) IndexSyncWithRefresh(ctx context.Context) error {
+func (s *ThingBulkEsModel) IndexSyncWithRefresh(ctx context.Context) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -622,7 +622,7 @@ func (s *Things) IndexSyncWithRefresh(ctx context.Context) error {
 	return BulkIndexSync(ctx, docs, "wait_for")
 }
 
-func (s *Things) IndexSync(ctx context.Context, refresh string) error {
+func (s *ThingBulkEsModel) IndexSync(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -630,7 +630,7 @@ func (s *Things) IndexSync(ctx context.Context, refresh string) error {
 	return BulkIndexSync(ctx, docs, refresh)
 }
 
-func (s *Things) Delete(ctx context.Context, refresh string) error {
+func (s *ThingBulkEsModel) Delete(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -642,7 +642,7 @@ func (s *Things) Delete(ctx context.Context, refresh string) error {
 	return BulkDeleteSync(ctx, ids, refresh)
 }
 
-func (s *Things) DeleteWithRefresh(ctx context.Context) error {
+func (s *ThingBulkEsModel) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
@@ -729,9 +729,9 @@ func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-type Thing2s []*Thing2
+type Thing2BulkEsModel []*Thing2
 
-func (s *Thing2s) ToEsDocuments() ([]Document, error) {
+func (s *Thing2BulkEsModel) ToEsDocuments() ([]Document, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -746,7 +746,7 @@ func (s *Thing2s) ToEsDocuments() ([]Document, error) {
 	return docs, nil
 }
 
-func (s *Thing2s) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing2BulkEsModel) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -754,7 +754,7 @@ func (s *Thing2s) IndexAsync(ctx context.Context, onSuccess func(ctx context.Con
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *Thing2s) IndexSyncWithRefresh(ctx context.Context) error {
+func (s *Thing2BulkEsModel) IndexSyncWithRefresh(ctx context.Context) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -762,7 +762,7 @@ func (s *Thing2s) IndexSyncWithRefresh(ctx context.Context) error {
 	return BulkIndexSync(ctx, docs, "wait_for")
 }
 
-func (s *Thing2s) IndexSync(ctx context.Context, refresh string) error {
+func (s *Thing2BulkEsModel) IndexSync(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -770,7 +770,7 @@ func (s *Thing2s) IndexSync(ctx context.Context, refresh string) error {
 	return BulkIndexSync(ctx, docs, refresh)
 }
 
-func (s *Thing2s) Delete(ctx context.Context, refresh string) error {
+func (s *Thing2BulkEsModel) Delete(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -782,6 +782,6 @@ func (s *Thing2s) Delete(ctx context.Context, refresh string) error {
 	return BulkDeleteSync(ctx, ids, refresh)
 }
 
-func (s *Thing2s) DeleteWithRefresh(ctx context.Context) error {
+func (s *Thing2BulkEsModel) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }

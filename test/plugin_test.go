@@ -18,8 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var defaultRequestTimeout = 30 * time.Second
-
 type PluginSuite struct {
 	suite.Suite
 	container *gnomock.Container
@@ -143,7 +141,7 @@ func (s *PluginSuite) TestBulkDelete() {
 	s.eventualKeywordSearch("Thing", "Id", *thing2.Id, *thing2.Id)
 	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
 	// delete all things
-	thingsProto := example_example.Things(things)
+	thingsProto := example_example.ThingBulkEsModel(things)
 	err := thingsProto.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 	// verify that all things were deleted
@@ -408,7 +406,7 @@ func (s *PluginSuite) indexThing(thing *example_example.Thing) {
 }
 
 func (s *PluginSuite) indexThings(things []*example_example.Thing) {
-	thingsProto := example_example.Things(things)
+	thingsProto := example_example.ThingBulkEsModel(things)
 	err := thingsProto.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 }

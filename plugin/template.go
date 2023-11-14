@@ -460,9 +460,9 @@ func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-type {{ .Desc.Name }}s []*{{ .Desc.Name }}
+type {{ .Desc.Name }}BulkEsModel []*{{ .Desc.Name }}
 
-func (s *{{ .Desc.Name }}s) ToEsDocuments() ([]Document, error) {
+func (s *{{ .Desc.Name }}BulkEsModel) ToEsDocuments() ([]Document, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -477,7 +477,7 @@ func (s *{{ .Desc.Name }}s) ToEsDocuments() ([]Document, error) {
 	return docs, nil
 }
 
-func (s *{{ .Desc.Name }}s) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *{{ .Desc.Name }}BulkEsModel) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -485,7 +485,7 @@ func (s *{{ .Desc.Name }}s) IndexAsync(ctx context.Context, onSuccess func(ctx c
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *{{ .Desc.Name }}s) IndexSyncWithRefresh(ctx context.Context) error {
+func (s *{{ .Desc.Name }}BulkEsModel) IndexSyncWithRefresh(ctx context.Context) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -493,7 +493,7 @@ func (s *{{ .Desc.Name }}s) IndexSyncWithRefresh(ctx context.Context) error {
 	return BulkIndexSync(ctx, docs, "wait_for")
 }
 
-func (s *{{ .Desc.Name }}s) IndexSync(ctx context.Context, refresh string) error {
+func (s *{{ .Desc.Name }}BulkEsModel) IndexSync(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -501,7 +501,7 @@ func (s *{{ .Desc.Name }}s) IndexSync(ctx context.Context, refresh string) error
 	return BulkIndexSync(ctx, docs, refresh)
 }
 
-func (s *{{ .Desc.Name }}s) Delete(ctx context.Context, refresh string) error {
+func (s *{{ .Desc.Name }}BulkEsModel) Delete(ctx context.Context, refresh string) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -513,7 +513,7 @@ func (s *{{ .Desc.Name }}s) Delete(ctx context.Context, refresh string) error {
 	return BulkDeleteSync(ctx, ids, refresh)
 }
 
-func (s *{{ .Desc.Name }}s) DeleteWithRefresh(ctx context.Context) error {
+func (s *{{ .Desc.Name }}BulkEsModel) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
