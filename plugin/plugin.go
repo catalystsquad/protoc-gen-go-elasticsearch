@@ -18,9 +18,6 @@ import (
 type Builder struct {
 	plugin         *protogen.Plugin
 	messages       map[string]struct{}
-	currentFile    string
-	currentPackage string
-	dbEngine       int
 	stringEnums    bool
 	suppressWarn   bool
 }
@@ -134,25 +131,6 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/logging"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esutil"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "encoding/json"})
-}
-
-var goTypeMap = map[protoreflect.Kind]string{
-	protoreflect.BoolKind:     "bool",
-	protoreflect.EnumKind:     "int",
-	protoreflect.Int32Kind:    "int32",
-	protoreflect.Sint32Kind:   "int32",
-	protoreflect.Uint32Kind:   "uint32",
-	protoreflect.Int64Kind:    "int64",
-	protoreflect.Sint64Kind:   "int64",
-	protoreflect.Uint64Kind:   "uint64",
-	protoreflect.Sfixed32Kind: "int32",
-	protoreflect.Fixed32Kind:  "uint32",
-	protoreflect.FloatKind:    "float32",
-	protoreflect.Sfixed64Kind: "int64",
-	protoreflect.Fixed64Kind:  "uint64",
-	protoreflect.DoubleKind:   "float64",
-	protoreflect.StringKind:   "string",
-	protoreflect.BytesKind:    "[]byte",
 }
 
 func getFieldOptions(field *protogen.Field) *elasticsearch.ElasticsearchFieldOptions {
@@ -285,7 +263,7 @@ func fieldValueString(field *protogen.Field) string {
 	if field.Desc.HasOptionalKeyword() {
 		return fmt.Sprintf("lo.FromPtr(%s)", name)
 	}
-	return fmt.Sprintf("%s", name)
+	return name
 }
 
 func isReference(field *protogen.Field) bool {

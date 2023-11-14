@@ -70,6 +70,9 @@ func InitializeWithConfigs(indexName string, clientConfig *v8.Config, bulkIndexe
 		errorutils.LogOnErr(nil, "error creating elasticsearch client", err)
 		return err
 	}
+	if bulkIndexerConfig.Client == nil {
+		bulkIndexerConfig.Client = ElasticsearchClient
+	}
 	bulkIndexer, err := esutil.NewBulkIndexer(*bulkIndexerConfig)
 	if err != nil {
 		errorutils.LogOnErr(nil, "error creating elasticsearch bulk indexer", err)
@@ -96,6 +99,18 @@ func Initialize(indexName, refresh string, addresses []string, numWorkers, flush
 
 func InitializeWithDefaults(addresses []string) error {
 	return Initialize("data", "false", addresses, 2, 5000000, 5*time.Second, 1*time.Minute)
+}
+
+func newRequestBulkIndexerWithRefresh(refresh string) (esutil.BulkIndexer, error) {
+	return esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+		Client:        ElasticsearchClient,
+		Index:         ElasticsearchIndexName,
+		NumWorkers:    1,
+		Refresh:       refresh,
+		OnError: func(ctx context.Context, err error) {
+			errorutils.LogOnErr(nil, "error encountered in bulk indexer", err)
+		},
+	})
 }
 
 func IndexSync(ctx context.Context, docs []Document, refresh string) error {
@@ -125,6 +140,68 @@ func IndexSync(ctx context.Context, docs []Document, refresh string) error {
 		}	
 	}
 	
+	return nil
+}
+
+func BulkIndexSync(ctx context.Context, docs []Document, refresh string) error {
+	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh(refresh)
+	if err != nil {
+		return err
+	}
+
+	for _, doc := range docs {
+		data, err := json.Marshal(doc)
+		if err != nil {
+			errorutils.LogOnErr(nil, "error marshalling document to json", err)
+			return err
+		}
+		item := esutil.BulkIndexerItem{
+			Action:     "index",
+			Index:      ElasticsearchIndexName,
+			DocumentID: doc.Id,
+			Body:       bytes.NewReader(data),
+		}
+		err = reqBulkIndexer.Add(ctx, item)
+		if err != nil {
+			errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
+			return err
+		}
+	}
+
+	err = reqBulkIndexer.Close(ctx)
+	if err != nil {
+		errorutils.LogOnErr(nil, "error closing request bulk indexer", err)
+		return err
+	}
+
+	return nil
+}
+
+func BulkDeleteSync(ctx context.Context, ids []string, refresh string) error {
+	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh(refresh)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		item := esutil.BulkIndexerItem{
+			Action:     "delete",
+			Index:      ElasticsearchIndexName,
+			DocumentID: id,
+		}
+		err = reqBulkIndexer.Add(ctx, item)
+		if err != nil {
+			errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
+			return err
+		}
+	}
+
+	err = reqBulkIndexer.Close(ctx)
+	if err != nil {
+		errorutils.LogOnErr(nil, "error closing request bulk indexer", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -362,7 +439,7 @@ func (s *{{ .Desc.Name }}) Delete(ctx context.Context, refresh string) error {
 	req := esapi.DeleteRequest{
 		Index: ElasticsearchIndexName,
 		DocumentID: *s.Id,
-        Refresh: refresh,
+		Refresh: refresh,
 	}
 	client, err := GetClient()
 	if err != nil {
@@ -382,6 +459,65 @@ func (s *{{ .Desc.Name }}) Delete(ctx context.Context, refresh string) error {
 func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
+
+type {{ .Desc.Name }}s []*{{ .Desc.Name }}
+
+func (s *{{ .Desc.Name }}s) ToEsDocuments() ([]Document, error) {
+	if s == nil {
+		return nil, nil
+	}
+	docs := []Document{}
+	for _, item := range *s {
+		itemDocs, err := item.ToEsDocuments()
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, itemDocs...)
+	}
+	return docs, nil
+}
+
+func (s *{{ .Desc.Name }}s) IndexAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
+}
+
+func (s *{{ .Desc.Name }}s) IndexSyncWithRefresh(ctx context.Context) error {
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return BulkIndexSync(ctx, docs, "wait_for")
+}
+
+func (s *{{ .Desc.Name }}s) IndexSync(ctx context.Context, refresh string) error {
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	return BulkIndexSync(ctx, docs, refresh)
+}
+
+func (s *{{ .Desc.Name }}s) Delete(ctx context.Context, refresh string) error {
+	docs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for _, doc := range docs {
+		ids = append(ids, doc.Id)
+	}
+	return BulkDeleteSync(ctx, ids, refresh)
+}
+
+func (s *{{ .Desc.Name }}s) DeleteWithRefresh(ctx context.Context) error {
+	return s.Delete(ctx, "wait_for")
+}
+
+
 {{ end }}
 {{ end }}
 `
