@@ -3,6 +3,11 @@ package test
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/brianvoe/gofakeit/v6"
 	example_example "github.com/catalystsquad/protoc-gen-go-elasticsearch/example"
 	"github.com/elastic/go-elasticsearch/v8"
@@ -11,10 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"io"
-	"strings"
-	"testing"
-	"time"
 )
 
 type PluginSuite struct {
@@ -120,6 +121,36 @@ func (s *PluginSuite) TestIndexSyncWithRefresh() {
 	require.NoError(s.T(), err)
 	response := s.keywordSearch("Thing", "Id", *thing.Id)
 	require.Contains(s.T(), response, *thing.Id)
+}
+
+func (s *PluginSuite) TestBulkIndex() {
+	things := s.generateRandomThings(3)
+	s.indexThings(things)
+	// do a simple search by id to verify that all things were indexed
+	thing1, thing2, thing3 := things[0], things[1], things[2]
+	s.eventualKeywordSearch("Thing", "Id", *thing1.Id, *thing1.Id)
+	s.eventualKeywordSearch("Thing", "Id", *thing2.Id, *thing2.Id)
+	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
+}
+
+func (s *PluginSuite) TestBulkDelete() {
+	things := s.generateRandomThings(3)
+	s.indexThings(things)
+	thing1, thing2, thing3 := things[0], things[1], things[2]
+	s.eventualKeywordSearch("Thing", "Id", *thing1.Id, *thing1.Id)
+	s.eventualKeywordSearch("Thing", "Id", *thing2.Id, *thing2.Id)
+	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
+	// delete all things
+	thingsProto := example_example.ThingBulkEsModel(things)
+	err := thingsProto.DeleteWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+	// verify that all things were deleted
+	response := s.keywordSearch("Thing", "Id", *thing1.Id)
+	require.NotContains(s.T(), response, *thing1.Id)
+	response = s.keywordSearch("Thing", "Id", *thing2.Id)
+	require.NotContains(s.T(), response, *thing2.Id)
+	response = s.keywordSearch("Thing", "Id", *thing3.Id)
+	require.NotContains(s.T(), response, *thing3.Id)
 }
 
 func (s *PluginSuite) startElasticsearch(t *testing.T) {
@@ -350,6 +381,18 @@ func (s *PluginSuite) generateRandomThing() *example_example.Thing {
 	return thing
 }
 
+func (s *PluginSuite) generateRandomThings(num int) []*example_example.Thing {
+	things := []*example_example.Thing{}
+	for i := 0; i < num; i++ {
+		thing := &example_example.Thing{}
+		err := gofakeit.Struct(&thing)
+		require.NoError(s.T(), err)
+		thing.ATimestamp = timestamppb.New(gofakeit.FutureDate())
+		things = append(things, thing)
+	}
+	return things
+}
+
 func (s *PluginSuite) generateRandomThing2() *example_example.Thing2 {
 	thing2 := &example_example.Thing2{}
 	err := gofakeit.Struct(&thing2)
@@ -359,6 +402,12 @@ func (s *PluginSuite) generateRandomThing2() *example_example.Thing2 {
 
 func (s *PluginSuite) indexThing(thing *example_example.Thing) {
 	err := thing.IndexSyncWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) indexThings(things []*example_example.Thing) {
+	thingsProto := example_example.ThingBulkEsModel(things)
+	err := thingsProto.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 }
 
