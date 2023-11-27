@@ -406,7 +406,7 @@ func QueueDocForDeletion(ctx context.Context, doc Document, onSuccess func(ctx c
 }
 
 {{- range .messages }}
-{{- if includeMessage . }}
+{{ if includeMessage . }}
 func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 	docs := []Document{}
 	doc := Document{
@@ -522,7 +522,7 @@ func (s *{{ .Desc.Name }}) IndexSync(ctx context.Context, refresh string) error 
 	return IndexSync(ctx, docs, refresh)
 }
 
-{{- if hasParentObjectTypes . }}
+{{ if hasParentObjectTypes . }}
 func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {

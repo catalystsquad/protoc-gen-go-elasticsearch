@@ -417,6 +417,7 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 func QueueDocForDeletion(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	return QueueBulkIndexItem(ctx, doc.Id, "delete", nil, onSuccess, onFailure)
 }
+
 func (s *Thing) ToEsDocuments() ([]Document, error) {
 	docs := []Document{}
 	doc := Document{
@@ -732,6 +733,7 @@ func (s *ThingBulkEsModel) Delete(ctx context.Context, refresh string) error {
 func (s *ThingBulkEsModel) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
+
 func (s *Thing2) ToEsDocuments() ([]Document, error) {
 	docs := []Document{}
 	doc := Document{
@@ -789,6 +791,7 @@ func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
 	}
 	return IndexSync(ctx, docs, refresh)
 }
+
 func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
