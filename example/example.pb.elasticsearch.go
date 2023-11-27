@@ -990,6 +990,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, on
 
 	return nil
 }
+
 func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	size := int64(100)
 	var handled int

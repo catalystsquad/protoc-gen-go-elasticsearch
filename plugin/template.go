@@ -673,7 +673,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.C
 }
 {{- end }}
 
-{{- if hasParentMessagesWithCascadeDeleteFromChild . }}
+{{ if hasParentMessagesWithCascadeDeleteFromChild . }}
 func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	size := int64(100)
 	var handled int
