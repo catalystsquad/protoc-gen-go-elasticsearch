@@ -10,6 +10,7 @@ import (
 	v8 "github.com/elastic/go-elasticsearch/v8"
 	esapi "github.com/elastic/go-elasticsearch/v8/esapi"
 	esutil "github.com/elastic/go-elasticsearch/v8/esutil"
+	types "github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	errorx "github.com/joomcode/errorx"
 	lo "github.com/samber/lo"
 	logrus "github.com/sirupsen/logrus"
@@ -231,6 +232,93 @@ func EnsureIndex(client *v8.Client) error {
 	return putMappings(client)
 }
 
+type searchResponse struct {
+	Hits struct {
+		Total struct {
+			Value int `json:"value"`
+		} `json:"total"`
+		Hits []struct {
+			Source Document      `json:"_source"`
+			Sort   []interface{} `json:"sort"`
+		} `json:"hits"`
+	} `json:"hits"`
+}
+
+func executeSearch(ctx context.Context, query types.Query, size int64, searchAfter []interface{}) (*searchResponse, error) {
+	req, err := buildSearchRequest(query, size, searchAfter)
+	if err != nil {
+		return nil, err
+	}
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	response, err := req.Do(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	bodyBytes, _ := io.ReadAll(response.Body)
+	if response.StatusCode != 200 {
+		return nil, errorx.IllegalState.New("unexpected status code searching: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	var searchResponse *searchResponse
+	if err := json.Unmarshal(bodyBytes, &searchResponse); err != nil {
+		return nil, err
+	}
+	return searchResponse, nil
+}
+
+func buildSearchRequest(query types.Query, size int64, searchAfter []interface{}) (*esapi.SearchRequest, error) {
+	body := map[string]interface{}{
+		"query": query,
+		"size":  size,
+		"sort": []map[string]string{
+			{"id": "asc"},
+		},
+		"_source": true,
+	}
+	if searchAfter != nil {
+		body["search_after"] = searchAfter
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return &esapi.SearchRequest{
+		Index: []string{ElasticsearchIndexName},
+		Body:  bytes.NewReader(bodyBytes),
+	}, nil
+}
+
+func getKeywordQuery(theType, key, query string) types.Query {
+	return types.Query{
+		Bool: &types.BoolQuery{
+			Must: []types.Query{
+				{
+					Term: map[string]types.TermQuery{"type": {Value: theType}},
+				},
+				{
+					Nested: &types.NestedQuery{
+						Path: "metadata",
+						Query: &types.Query{
+							Bool: &types.BoolQuery{
+								Must: []types.Query{
+									{
+										Match: map[string]types.MatchQuery{"metadata.key": {Query: key}},
+									},
+									{
+										Match: map[string]types.MatchQuery{"metadata.keywordValue": {Query: query}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func createIndex(client *v8.Client) error {
 	req := esapi.IndicesCreateRequest{
 		Index: ElasticsearchIndexName,
@@ -329,7 +417,6 @@ func QueueDocForIndexing(ctx context.Context, doc Document, onSuccess func(ctx c
 func QueueDocForDeletion(ctx context.Context, doc Document, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	return QueueBulkIndexItem(ctx, doc.Id, "delete", nil, onSuccess, onFailure)
 }
-
 func (s *Thing) ToEsDocuments() ([]Document, error) {
 	docs := []Document{}
 	doc := Document{
@@ -645,7 +732,6 @@ func (s *ThingBulkEsModel) Delete(ctx context.Context, refresh string) error {
 func (s *ThingBulkEsModel) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
-
 func (s *Thing2) ToEsDocuments() ([]Document, error) {
 	docs := []Document{}
 	doc := Document{
@@ -702,6 +788,55 @@ func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
 		return err
 	}
 	return IndexSync(ctx, docs, refresh)
+}
+func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	nestedDocs, err := s.ToEsDocuments()
+	if err != nil {
+		return err
+	}
+	if len(nestedDocs) != 1 {
+		return errorx.IllegalState.New("expected exactly one es document, got %d", len(nestedDocs))
+	}
+	nestedDoc := nestedDocs[0]
+
+	size := int64(100)
+	var handled int
+	var searchAfter []interface{}
+
+	query := getKeywordQuery(ThingEsType, "AssociatedThingId", *s.Id)
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			for _, metadata := range nestedDoc.Metadata {
+				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThing%s", *metadata.Key))
+				for i := range doc.Metadata {
+					if *doc.Metadata[i].Key == *metadata.Key {
+						doc.Metadata[i] = metadata
+					}
+				}
+			}
+			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
+	}
+
+	return nil
 }
 
 func (s *Thing2) Delete(ctx context.Context, refresh string) error {

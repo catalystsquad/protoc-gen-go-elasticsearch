@@ -2,17 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/catalystsquad/protoc-gen-go-elasticsearch/plugin"
-	"io/ioutil"
+	"io"
 	"os"
 
+	"github.com/catalystsquad/protoc-gen-go-elasticsearch/plugin"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
 func main() {
-	input, err := ioutil.ReadAll(os.Stdin)
+	input, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		panic(err)
 	}
@@ -38,8 +38,6 @@ func main() {
 	out, err := proto.Marshal(response)
 	if err != nil {
 		panic(err)
-	}
-	if len(out) == -10 {
 	}
 	fmt.Print(string(out))
 }

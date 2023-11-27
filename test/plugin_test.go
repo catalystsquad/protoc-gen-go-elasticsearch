@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -104,6 +105,39 @@ func (s *PluginSuite) TestSearchNestedObject() {
 	//// search for repeated relationship objects
 	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[0].Name, *thing.Id)
 	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[1].Name, *thing.Id)
+}
+
+func (s *PluginSuite) TestReindexRelated() {
+	thing, associatedThing2 := s.indexRandomThingAndThing2()
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
+	// update the associatedThing2 and reindex
+	oldName := associatedThing2.Name
+	associatedThing2.Name = "new name for TestReindexRelated"
+	s.reindexThing2RelatedDocsAsync(associatedThing2)
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
+	// ensure that the old name is not in the index
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", oldName)))
+}
+
+func (s *PluginSuite) TestReindexRelatedPagination() {
+	thing2 := s.generateRandomThing2()
+	count := 500
+	things := s.bulkIndexRandomThingsWithThing2Relationship(thing2, count)
+	// update the associatedThing2 and reindex
+	originalName := thing2.Name
+	thing2.Name = "new name for TestReindexRelatedPagination"
+	s.reindexThing2RelatedDocsAsync(thing2)
+	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingName", thing2.Name), count)
+	// ensure that the old name is not in the index
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", originalName)))
+	// cleanup so that the excessive amount of left over docs don't affect other tests
+	err := thing2.DeleteWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+	thingsProto := example_example.ThingBulkEsModel(things)
+	err = thingsProto.DeleteWithRefresh(context.Background())
+	require.NoError(s.T(), err)
 }
 
 func (s *PluginSuite) TestDelete() {
@@ -373,6 +407,33 @@ func (s *PluginSuite) indexRandomThingWithRelationships() *example_example.Thing
 	return thing
 }
 
+func (s *PluginSuite) indexRandomThingWithThing2Relationship(thing2 *example_example.Thing2) *example_example.Thing {
+	thing := s.generateRandomThing()
+	thing.AssociatedThing = thing2
+	s.indexThing(thing)
+	return thing
+}
+
+func (s *PluginSuite) bulkIndexRandomThingsWithThing2Relationship(thing2 *example_example.Thing2, num int) []*example_example.Thing {
+	things := []*example_example.Thing{}
+	for i := 0; i < num; i++ {
+		thing := s.generateRandomThing()
+		thing.AssociatedThing = thing2
+		things = append(things, thing)
+	}
+	s.indexThings(things)
+	return things
+}
+
+func (s *PluginSuite) indexRandomThingAndThing2() (*example_example.Thing, *example_example.Thing2) {
+	thing := s.generateRandomThing()
+	thing2 := s.generateRandomThing2()
+	thing.AssociatedThing = thing2
+	s.indexThing(thing)
+	s.indexThing2(thing2)
+	return thing, thing2
+}
+
 func (s *PluginSuite) generateRandomThing() *example_example.Thing {
 	thing := &example_example.Thing{}
 	err := gofakeit.Struct(&thing)
@@ -413,6 +474,11 @@ func (s *PluginSuite) indexThings(things []*example_example.Thing) {
 
 func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
 	err := thing2.IndexSyncWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) reindexThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
+	err := thing2.ReindexRelatedDocumentsAsync(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
@@ -481,6 +547,27 @@ func (s *PluginSuite) eventualSearch(query, expected string) {
 		body := s.search(query)
 		return strings.Contains(body, expected)
 	}, 10*time.Second, 1*time.Second)
+}
+
+type searchResponse struct {
+	Hits struct {
+		Total struct {
+			Value int `json:"value"`
+		} `json:"total"`
+	} `json:"hits"`
+}
+
+func (s *PluginSuite) eventualSearchCount(query string, expectedCount int) {
+	require.Eventually(s.T(), func() bool {
+		return s.searchCount(query) == expectedCount
+	}, 10*time.Second, 1*time.Second)
+}
+
+func (s *PluginSuite) searchCount(query string) int {
+	body := s.search(query)
+	var bodyMap searchResponse
+	_ = json.Unmarshal([]byte(body), &bodyMap)
+	return bodyMap.Hits.Total.Value
 }
 
 func (s *PluginSuite) search(query string) string {

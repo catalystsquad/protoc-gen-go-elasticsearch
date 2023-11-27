@@ -3,23 +3,23 @@ package plugin
 import (
 	"bytes"
 	"fmt"
-	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"reflect"
 	"strings"
 	"text/template"
 
+	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
 type Builder struct {
-	plugin         *protogen.Plugin
-	messages       map[string]struct{}
-	stringEnums    bool
-	suppressWarn   bool
+	plugin       *protogen.Plugin
+	messages     map[string]struct{}
+	stringEnums  bool
+	suppressWarn bool
 }
 
 var f *protogen.GeneratedFile
@@ -29,22 +29,26 @@ var defaultIndexName = "data"
 const SUPPORTS_OPTIONAL_FIELDS = 1
 
 var templateFuncs = map[string]any{
-	"includeMessage":   includeMessage,
-	"includeField":     includeField,
-	"fieldComments":    fieldComments,
-	"toString":         toString,
-	"toLower":          strings.ToLower,
-	"isNumeric":        isNumeric,
-	"isBoolean":        isBoolean,
-	"isTimestamp":      isTimestamp,
-	"isStructPb":       isStructPb,
-	"isBytes":          isBytes,
-	"isRelationship":   isRelationship,
-	"isNested":         isNested,
-	"maybeDereference": maybeDereference,
-	"isReference":      isReference,
-	"indexName":        getIndexName,
-	"fieldValueString": fieldValueString,
+	"hasParentObjectTypes":             hasParentObjectTypes,
+	"getParentObjectTypeNames":         getParentObjectTypeNames,
+	"getChildObjectNestedOnFieldNames": getChildObjectNestedOnFieldNames,
+	"includeMessage":                   includeMessage,
+	"includeField":                     includeField,
+	"fieldComments":                    fieldComments,
+	"toString":                         toString,
+	"toLower":                          strings.ToLower,
+	"isNumeric":                        isNumeric,
+	"isBoolean":                        isBoolean,
+	"isTimestamp":                      isTimestamp,
+	"isStructPb":                       isStructPb,
+	"isBytes":                          isBytes,
+	"isRelationship":                   isRelationship,
+	"isNested":                         isNested,
+	"maybeDereference":                 maybeDereference,
+	"isReference":                      isReference,
+	"indexName":                        getIndexName,
+	"fieldValueString":                 fieldValueString,
+	"add":                              add,
 }
 
 func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*Builder, error) {
@@ -97,6 +101,7 @@ func (b *Builder) Generate() (response *pluginpb.CodeGeneratorResponse, err erro
 			}
 			fileName := protoFile.GeneratedFilenamePrefix + ".pb.elasticsearch.go"
 			f = b.plugin.NewGeneratedFile(fileName, ".")
+			initMessageMetadata(protoFile)
 			writeGlobalImports(f)
 			var data bytes.Buffer
 			templateMap := map[string]any{
@@ -130,7 +135,77 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/sirupsen/logrus"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/logging"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esutil"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/typedapi/types"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "encoding/json"})
+}
+
+type messageMeta struct {
+	// parentObjectFields is a map of parent object names to a list of field names
+	parentObjectFields map[string][]string
+}
+
+var messageMetadata map[string]*messageMeta
+
+// initMessageMetadata creates a map of message name to additional metadata,
+// which currently just contains a mapping from child message to parent message
+// in order to determine which messages need to be reindexed when a child
+// message is updated
+func initMessageMetadata(file *protogen.File) {
+	meta := map[string]*messageMeta{}
+
+	// iterate over all messages to determine which messages are nested on other messages
+	for _, message := range file.Messages {
+		messageName := message.GoIdent.GoName
+		if _, ok := meta[messageName]; !ok {
+			meta[messageName] = &messageMeta{parentObjectFields: map[string][]string{}}
+		}
+
+		// check if message has nested fields
+		for _, field := range message.Fields {
+			// exclude repeated fields
+			if isNested(field) && !field.Desc.IsList() {
+				// if nested, add metadata to child message
+				childFieldTypeName := field.Message.GoIdent.GoName
+				if _, ok := meta[childFieldTypeName]; !ok {
+					meta[childFieldTypeName] = &messageMeta{parentObjectFields: map[string][]string{}}
+				}
+				parentFieldName := field.GoName
+				meta[childFieldTypeName].parentObjectFields[messageName] = append(meta[childFieldTypeName].parentObjectFields[messageName], parentFieldName)
+			}
+		}
+	}
+
+	messageMetadata = meta
+}
+
+func hasParentObjectTypes(message *protogen.Message) bool {
+	return len(getParentObjectTypeNames(message)) > 0
+}
+
+func getParentObjectTypeNames(message *protogen.Message) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		parentObjectTypes := []string{}
+		for parentObjectType := range meta.parentObjectFields {
+			parentObjectTypes = append(parentObjectTypes, parentObjectType)
+		}
+		return parentObjectTypes
+	}
+	return []string{}
+}
+
+func getChildObjectNestedOnFieldNames(message *protogen.Message, parentName string) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		if parentObjectFields, ok := meta.parentObjectFields[parentName]; ok {
+			return parentObjectFields
+		}
+	}
+	return []string{}
 }
 
 func getFieldOptions(field *protogen.Field) *elasticsearch.ElasticsearchFieldOptions {
@@ -276,4 +351,8 @@ func getIndexName(file *protogen.File) string {
 		return opts.IndexName
 	}
 	return defaultIndexName
+}
+
+func add(a, b int) int {
+	return a + b
 }
