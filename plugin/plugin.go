@@ -29,26 +29,29 @@ var defaultIndexName = "data"
 const SUPPORTS_OPTIONAL_FIELDS = 1
 
 var templateFuncs = map[string]any{
-	"hasParentObjectTypes":             hasParentObjectTypes,
-	"getParentObjectTypeNames":         getParentObjectTypeNames,
-	"getChildObjectNestedOnFieldNames": getChildObjectNestedOnFieldNames,
-	"includeMessage":                   includeMessage,
-	"includeField":                     includeField,
-	"fieldComments":                    fieldComments,
-	"toString":                         toString,
-	"toLower":                          strings.ToLower,
-	"isNumeric":                        isNumeric,
-	"isBoolean":                        isBoolean,
-	"isTimestamp":                      isTimestamp,
-	"isStructPb":                       isStructPb,
-	"isBytes":                          isBytes,
-	"isRelationship":                   isRelationship,
-	"isNested":                         isNested,
-	"maybeDereference":                 maybeDereference,
-	"isReference":                      isReference,
-	"indexName":                        getIndexName,
-	"fieldValueString":                 fieldValueString,
-	"add":                              add,
+	"hasParentMessages":                                           hasParentMessages,
+	"getParentMessageNames":                                       getParentMessageNames,
+	"getChildMessageNestedOnFieldNames":                           getChildMessageNestedOnFieldNames,
+	"hasParentMessagesWithCascadeDeleteFromChild":                 hasParentMessagesWithCascadeDeleteFromChild,
+	"getParentMessageNamesWithCascadeDeleteFromChild":             getParentMessageNamesWithCascadeDeleteFromChild,
+	"getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames": getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames,
+	"includeMessage":                                              includeMessage,
+	"includeField":                                                includeField,
+	"fieldComments":                                               fieldComments,
+	"toString":                                                    toString,
+	"toLower":                                                     strings.ToLower,
+	"isNumeric":                                                   isNumeric,
+	"isBoolean":                                                   isBoolean,
+	"isTimestamp":                                                 isTimestamp,
+	"isStructPb":                                                  isStructPb,
+	"isBytes":                                                     isBytes,
+	"isRelationship":                                              isRelationship,
+	"isNested":                                                    isNested,
+	"maybeDereference":                                            maybeDereference,
+	"isReference":                                                 isReference,
+	"indexName":                                                   getIndexName,
+	"fieldValueString":                                            fieldValueString,
+	"add":                                                         add,
 }
 
 func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*Builder, error) {
@@ -140,10 +143,17 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 }
 
 type messageMeta struct {
-	// parentObjectFields is a map of parent object names to a list of field names
-	parentObjectFields map[string][]string
+	// parentMessageFields is a map of parent message names to a list of field
+	// names
+	parentMessageFields map[string][]string
+
+	// parentMessageFieldsWithCascadeDeleteFromChild is a map of parent message
+	// names to a list of field names that should trigger a cascade delete of
+	// the parent message when the child message is deleted
+	parentMessageFieldsWithCascadeDeleteFromChild map[string][]string
 }
 
+// messageMetadata is a map of message name to additional metadata
 var messageMetadata map[string]*messageMeta
 
 // initMessageMetadata creates a map of message name to additional metadata,
@@ -157,7 +167,10 @@ func initMessageMetadata(file *protogen.File) {
 	for _, message := range file.Messages {
 		messageName := message.GoIdent.GoName
 		if _, ok := meta[messageName]; !ok {
-			meta[messageName] = &messageMeta{parentObjectFields: map[string][]string{}}
+			meta[messageName] = &messageMeta{
+				parentMessageFields:                           map[string][]string{},
+				parentMessageFieldsWithCascadeDeleteFromChild: map[string][]string{},
+			}
 		}
 
 		// check if message has nested fields
@@ -167,10 +180,20 @@ func initMessageMetadata(file *protogen.File) {
 				// if nested, add metadata to child message
 				childFieldTypeName := field.Message.GoIdent.GoName
 				if _, ok := meta[childFieldTypeName]; !ok {
-					meta[childFieldTypeName] = &messageMeta{parentObjectFields: map[string][]string{}}
+					meta[childFieldTypeName] = &messageMeta{
+						parentMessageFields:                           map[string][]string{},
+						parentMessageFieldsWithCascadeDeleteFromChild: map[string][]string{},
+					}
 				}
 				parentFieldName := field.GoName
-				meta[childFieldTypeName].parentObjectFields[messageName] = append(meta[childFieldTypeName].parentObjectFields[messageName], parentFieldName)
+				// add parent message name to child message metadata
+				meta[childFieldTypeName].parentMessageFields[messageName] = append(meta[childFieldTypeName].parentMessageFields[messageName], parentFieldName)
+				// add parent message name to child message metadata as
+				// "delete from child" field if cascade delete is enabled
+				fieldOptions := getFieldOptions(field)
+				if fieldOptions != nil && fieldOptions.EnableCascadeDeleteFromChild {
+					meta[childFieldTypeName].parentMessageFieldsWithCascadeDeleteFromChild[messageName] = append(meta[childFieldTypeName].parentMessageFieldsWithCascadeDeleteFromChild[messageName], parentFieldName)
+				}
 			}
 		}
 	}
@@ -178,31 +201,61 @@ func initMessageMetadata(file *protogen.File) {
 	messageMetadata = meta
 }
 
-func hasParentObjectTypes(message *protogen.Message) bool {
-	return len(getParentObjectTypeNames(message)) > 0
+func hasParentMessages(message *protogen.Message) bool {
+	return len(getParentMessageNames(message)) > 0
 }
 
-func getParentObjectTypeNames(message *protogen.Message) []string {
+func getParentMessageNames(message *protogen.Message) []string {
 	if message == nil {
 		return []string{}
 	}
 	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
-		parentObjectTypes := []string{}
-		for parentObjectType := range meta.parentObjectFields {
-			parentObjectTypes = append(parentObjectTypes, parentObjectType)
+		parentMessageTypes := []string{}
+		for parentMessageType := range meta.parentMessageFields {
+			parentMessageTypes = append(parentMessageTypes, parentMessageType)
 		}
-		return parentObjectTypes
+		return parentMessageTypes
 	}
 	return []string{}
 }
 
-func getChildObjectNestedOnFieldNames(message *protogen.Message, parentName string) []string {
+func getChildMessageNestedOnFieldNames(message *protogen.Message, parentName string) []string {
 	if message == nil {
 		return []string{}
 	}
 	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
-		if parentObjectFields, ok := meta.parentObjectFields[parentName]; ok {
-			return parentObjectFields
+		if parentMessageFields, ok := meta.parentMessageFields[parentName]; ok {
+			return parentMessageFields
+		}
+	}
+	return []string{}
+}
+
+func hasParentMessagesWithCascadeDeleteFromChild(message *protogen.Message) bool {
+	return len(getParentMessageNamesWithCascadeDeleteFromChild(message)) > 0
+}
+
+func getParentMessageNamesWithCascadeDeleteFromChild(message *protogen.Message) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		cascadeDeleteFromChildFields := []string{}
+		for parentMessageType := range meta.parentMessageFieldsWithCascadeDeleteFromChild {
+			cascadeDeleteFromChildFields = append(cascadeDeleteFromChildFields, parentMessageType)
+		}
+		return cascadeDeleteFromChildFields
+	}
+	return []string{}
+}
+
+func getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames(message *protogen.Message, parentName string) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		if parentMessageFields, ok := meta.parentMessageFieldsWithCascadeDeleteFromChild[parentName]; ok {
+			return parentMessageFields
 		}
 	}
 	return []string{}

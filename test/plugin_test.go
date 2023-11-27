@@ -140,6 +140,31 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	require.NoError(s.T(), err)
 }
 
+func (s *PluginSuite) TestReindexRelatedAfterDelete() {
+	thing, associatedThing2 := s.indexRandomThingAndThing2()
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingId", *associatedThing2.Id, *thing.Id)
+	// delete the associatedThing2 and reindex
+	err := associatedThing2.DeleteWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+	s.reindexThing2RelatedDocsAfterDeleteAsync(associatedThing2)
+	// ensure that the old id is not in the index
+	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *associatedThing2.Id), 0)
+}
+
+func (s *PluginSuite) TestDeleteRelated() {
+	thing, associatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
+	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *associatedThing2.Id, *thing.Id)
+	// delete the associatedThing2 and call delete related
+	err := associatedThing2.DeleteWithRefresh(context.Background())
+	require.NoError(s.T(), err)
+	s.deleteThing2RelatedDocsAsync(associatedThing2)
+	// ensure that thing1 is not in the index
+	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *thing.Id), 0)
+}
+
 func (s *PluginSuite) TestDelete() {
 	thing := s.indexRandomThing()
 	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
@@ -434,6 +459,15 @@ func (s *PluginSuite) indexRandomThingAndThing2() (*example_example.Thing, *exam
 	return thing, thing2
 }
 
+func (s *PluginSuite) indexRandomThingAndThing2viaWithCascadeDelete() (*example_example.Thing, *example_example.Thing2) {
+	thing := s.generateRandomThing()
+	thing2 := s.generateRandomThing2()
+	thing.AssociatedThingWithCascadeDelete = thing2
+	s.indexThing(thing)
+	s.indexThing2(thing2)
+	return thing, thing2
+}
+
 func (s *PluginSuite) generateRandomThing() *example_example.Thing {
 	thing := &example_example.Thing{}
 	err := gofakeit.Struct(&thing)
@@ -479,6 +513,16 @@ func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
 
 func (s *PluginSuite) reindexThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
 	err := thing2.ReindexRelatedDocumentsAsync(context.Background(), nil, nil)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteAsync(thing2 *example_example.Thing2) {
+	err := thing2.ReindexRelatedDocumentsAfterDeleteAsync(context.Background(), nil, nil)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) deleteThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
+	err := thing2.DeleteRelatedDocumentsAsync(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 

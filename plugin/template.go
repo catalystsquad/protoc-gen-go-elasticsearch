@@ -522,7 +522,32 @@ func (s *{{ .Desc.Name }}) IndexSync(ctx context.Context, refresh string) error 
 	return IndexSync(ctx, docs, refresh)
 }
 
-{{ if hasParentObjectTypes . }}
+func (s *{{ .Desc.Name }}) Delete(ctx context.Context, refresh string) error {
+	req := esapi.DeleteRequest{
+		Index: ElasticsearchIndexName,
+		DocumentID: *s.Id,
+		Refresh: refresh,
+	}
+	client, err := GetClient()
+	if err != nil {
+		return err
+	}
+	response, err := req.Do(ctx, client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 && response.StatusCode != 404 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code deleting {{ .Desc.Name }}: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
+	return s.Delete(ctx, "wait_for")
+}
+
+{{ if hasParentMessages . }}
 func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
@@ -539,10 +564,10 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onS
 
 	{{/* save the message to a var so that it is accessible inside of the range scope */}}
 	{{- $message := . }}
-	{{- range getParentObjectTypeNames . }}
+	{{- range getParentMessageNames . }}
 	{{- $parentMessageName := . }}
-	{{- $childObjectNestedOnFields := getChildObjectNestedOnFieldNames $message . }}
-	{{- range $index, $nestedOnField := $childObjectNestedOnFields }}
+	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message . }}
+	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
 	{{- if eq $index 0 }}
 	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- else }}
@@ -579,7 +604,64 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onS
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	{{- if ne $index (add (len $childObjectNestedOnFields) -1) }}
+	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
+
+	handled = 0
+	searchAfter = nil
+	{{- end }}
+	{{- end }}
+	{{- end }}
+
+	return nil
+}
+
+func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	size := int64(100)
+	var handled int
+	var searchAfter []interface{}
+
+	{{/* save the message to a var so that it is accessible inside of the range scope */}}
+	{{- $message := . }}
+	{{- range getParentMessageNames . }}
+	{{- $parentMessageName := . }}
+	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message . }}
+	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
+	{{- if eq $index 0 }}
+	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	{{- else }}
+	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	{{- end }}
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			newMetadata := []Metadata{}
+			for i := range doc.Metadata {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "{{ $nestedOnField }}") {
+					newMetadata = append(newMetadata, doc.Metadata[i])
+				}
+			}
+			doc.Metadata = newMetadata
+			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
+	}
+	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
 
 	handled = 0
 	searchAfter = nil
@@ -591,30 +673,57 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onS
 }
 {{- end }}
 
-func (s *{{ .Desc.Name }}) Delete(ctx context.Context, refresh string) error {
-	req := esapi.DeleteRequest{
-		Index: ElasticsearchIndexName,
-		DocumentID: *s.Id,
-		Refresh: refresh,
+{{- if hasParentMessagesWithCascadeDeleteFromChild . }}
+func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	size := int64(100)
+	var handled int
+	var searchAfter []interface{}
+
+	{{/* save the message to a var so that it is accessible inside of the range scope */}}
+	{{- $message := . }}
+	{{- range getParentMessageNamesWithCascadeDeleteFromChild . }}
+	{{- $parentMessageName := . }}
+	{{- $childMessageNestedOnFields := getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames $message . }}
+	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
+	{{- if eq $index 0 }}
+	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	{{- else }}
+	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	{{- end }}
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			err = QueueDocForDeletion(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	client, err := GetClient()
-	if err != nil {
-		return err
-	}
-	response, err := req.Do(ctx, client)
-	if err != nil {
-		return err
-	}
-	if response.StatusCode != 200 && response.StatusCode != 404 {
-		bodyBytes, _ := io.ReadAll(response.Body)
-		return errorx.IllegalState.New("unexpected status code deleting {{ .Desc.Name }}: %d with body: %s", response.StatusCode, string(bodyBytes))
-	}
+	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
+
+	handled = 0
+	searchAfter = nil
+	{{- end }}
+	{{- end }}
+	{{- end }}
+
 	return nil
 }
-
-func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
-	return s.Delete(ctx, "wait_for")
-}
+{{- end }}
 
 type {{ .Desc.Name }}BulkEsModel []*{{ .Desc.Name }}
 

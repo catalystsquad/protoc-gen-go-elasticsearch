@@ -57,6 +57,8 @@ message Thing {
   optional google.protobuf.Timestamp optional_timestamp = 27;
   // @gotags: fake:"{int32}"
   repeated int32 repeated_int32 = 28;
+  // @gotags: fake:"skip"
+  Thing2 associated_thing_with_cascade_delete = 29 [(elasticsearch.elasticsearch_field).nested = true, (elasticsearch.elasticsearch_field).enableCascadeDeleteFromChild = true];
 }
 
 message Thing2 {

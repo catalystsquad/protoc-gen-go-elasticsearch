@@ -624,6 +624,21 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 		doc.Metadata = append(doc.Metadata, metaData)
 	}
 
+	if s.AssociatedThingWithCascadeDelete != nil {
+
+		AssociatedThingWithCascadeDeleteDocs, err := s.AssociatedThingWithCascadeDelete.ToEsDocuments()
+		if err != nil {
+			return nil, err
+		}
+		for _, AssociatedThingWithCascadeDeleteDoc := range AssociatedThingWithCascadeDeleteDocs {
+			for _, metadata := range AssociatedThingWithCascadeDeleteDoc.Metadata {
+				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThingWithCascadeDelete%s", *metadata.Key))
+				doc.Metadata = append(doc.Metadata, metadata)
+			}
+		}
+
+	}
+
 	docs = append(docs, doc)
 	return docs, nil
 }
@@ -792,6 +807,31 @@ func (s *Thing2) IndexSync(ctx context.Context, refresh string) error {
 	return IndexSync(ctx, docs, refresh)
 }
 
+func (s *Thing2) Delete(ctx context.Context, refresh string) error {
+	req := esapi.DeleteRequest{
+		Index:      ElasticsearchIndexName,
+		DocumentID: *s.Id,
+		Refresh:    refresh,
+	}
+	client, err := GetClient()
+	if err != nil {
+		return err
+	}
+	response, err := req.Do(ctx, client)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 && response.StatusCode != 404 {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return errorx.IllegalState.New("unexpected status code deleting Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
+	}
+	return nil
+}
+
+func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
+	return s.Delete(ctx, "wait_for")
+}
+
 func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
@@ -839,32 +879,148 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
 
+	handled = 0
+	searchAfter = nil
+	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			for _, metadata := range nestedDoc.Metadata {
+				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThingWithCascadeDelete%s", *metadata.Key))
+				for i := range doc.Metadata {
+					if *doc.Metadata[i].Key == *metadata.Key {
+						doc.Metadata[i] = metadata
+					}
+				}
+			}
+			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
+	}
+
 	return nil
 }
 
-func (s *Thing2) Delete(ctx context.Context, refresh string) error {
-	req := esapi.DeleteRequest{
-		Index:      ElasticsearchIndexName,
-		DocumentID: *s.Id,
-		Refresh:    refresh,
+func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	size := int64(100)
+	var handled int
+	var searchAfter []interface{}
+
+	query := getKeywordQuery(ThingEsType, "AssociatedThingId", *s.Id)
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			newMetadata := []Metadata{}
+			for i := range doc.Metadata {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "AssociatedThing") {
+					newMetadata = append(newMetadata, doc.Metadata[i])
+				}
+			}
+			doc.Metadata = newMetadata
+			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	client, err := GetClient()
-	if err != nil {
-		return err
+
+	handled = 0
+	searchAfter = nil
+	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			newMetadata := []Metadata{}
+			for i := range doc.Metadata {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "AssociatedThingWithCascadeDelete") {
+					newMetadata = append(newMetadata, doc.Metadata[i])
+				}
+			}
+			doc.Metadata = newMetadata
+			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	response, err := req.Do(ctx, client)
-	if err != nil {
-		return err
-	}
-	if response.StatusCode != 200 && response.StatusCode != 404 {
-		bodyBytes, _ := io.ReadAll(response.Body)
-		return errorx.IllegalState.New("unexpected status code deleting Thing2: %d with body: %s", response.StatusCode, string(bodyBytes))
-	}
+
 	return nil
 }
+func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	size := int64(100)
+	var handled int
+	var searchAfter []interface{}
 
-func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
-	return s.Delete(ctx, "wait_for")
+	query := getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	for {
+		res, err := executeSearch(ctx, query, size, searchAfter)
+		if err != nil {
+			return err
+		}
+		if len(res.Hits.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range res.Hits.Hits {
+			doc := hit.Source
+			err = QueueDocForDeletion(ctx, doc, onSuccess, onFailure)
+			if err != nil {
+				return err
+			}
+			handled++
+		}
+
+		if handled >= res.Hits.Total.Value {
+			break
+		}
+		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
+	}
+
+	return nil
 }
 
 type Thing2BulkEsModel []*Thing2
