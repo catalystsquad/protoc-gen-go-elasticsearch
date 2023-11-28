@@ -878,9 +878,9 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-
 	handled = 0
 	searchAfter = nil
+
 	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
@@ -953,9 +953,9 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, on
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-
 	handled = 0
 	searchAfter = nil
+
 	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)

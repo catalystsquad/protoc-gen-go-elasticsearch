@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -29,6 +30,7 @@ var defaultIndexName = "data"
 const SUPPORTS_OPTIONAL_FIELDS = 1
 
 var templateFuncs = map[string]any{
+	"hasDisableReindexRelatedOption":                              hasDisableReindexRelatedOption,
 	"hasParentMessages":                                           hasParentMessages,
 	"getParentMessageNames":                                       getParentMessageNames,
 	"getChildMessageNestedOnFieldNames":                           getChildMessageNestedOnFieldNames,
@@ -198,7 +200,21 @@ func initMessageMetadata(file *protogen.File) {
 		}
 	}
 
+	// ensure all of the nested slices are sorted to ensure consistent ordering when regenerating
+	for _, meta := range meta {
+		for _, parentMessageFields := range meta.parentMessageFields {
+			slices.Sort(parentMessageFields)
+		}
+		for _, parentMessageFields := range meta.parentMessageFieldsWithCascadeDeleteFromChild {
+			slices.Sort(parentMessageFields)
+		}
+	}
+
 	messageMetadata = meta
+}
+
+func hasDisableReindexRelatedOption(message *protogen.Message) bool {
+	return getMessageOptions(message).DisableReindexRelated
 }
 
 func hasParentMessages(message *protogen.Message) bool {
@@ -214,6 +230,7 @@ func getParentMessageNames(message *protogen.Message) []string {
 		for parentMessageType := range meta.parentMessageFields {
 			parentMessageTypes = append(parentMessageTypes, parentMessageType)
 		}
+		slices.Sort(parentMessageTypes) // sort to ensure consistent ordering
 		return parentMessageTypes
 	}
 	return []string{}
@@ -244,6 +261,7 @@ func getParentMessageNamesWithCascadeDeleteFromChild(message *protogen.Message) 
 		for parentMessageType := range meta.parentMessageFieldsWithCascadeDeleteFromChild {
 			cascadeDeleteFromChildFields = append(cascadeDeleteFromChildFields, parentMessageType)
 		}
+		slices.Sort(cascadeDeleteFromChildFields) // sort to ensure consistent ordering
 		return cascadeDeleteFromChildFields
 	}
 	return []string{}
