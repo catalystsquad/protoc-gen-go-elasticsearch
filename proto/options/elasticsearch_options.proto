@@ -35,4 +35,7 @@ message elasticsearchFieldOptions {
   bool ignore = 2;
   bool keyword = 3;
   bool nested = 4;
+  // enableCascadeDeleteFromChild will enable creation of methods that will
+  // delete the parent object from the nested object
+  bool enableCascadeDeleteFromChild = 5;
 }

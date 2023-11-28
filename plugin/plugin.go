@@ -3,23 +3,23 @@ package plugin
 import (
 	"bytes"
 	"fmt"
-	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"reflect"
 	"strings"
 	"text/template"
 
+	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
 type Builder struct {
-	plugin         *protogen.Plugin
-	messages       map[string]struct{}
-	stringEnums    bool
-	suppressWarn   bool
+	plugin       *protogen.Plugin
+	messages     map[string]struct{}
+	stringEnums  bool
+	suppressWarn bool
 }
 
 var f *protogen.GeneratedFile
@@ -29,22 +29,29 @@ var defaultIndexName = "data"
 const SUPPORTS_OPTIONAL_FIELDS = 1
 
 var templateFuncs = map[string]any{
-	"includeMessage":   includeMessage,
-	"includeField":     includeField,
-	"fieldComments":    fieldComments,
-	"toString":         toString,
-	"toLower":          strings.ToLower,
-	"isNumeric":        isNumeric,
-	"isBoolean":        isBoolean,
-	"isTimestamp":      isTimestamp,
-	"isStructPb":       isStructPb,
-	"isBytes":          isBytes,
-	"isRelationship":   isRelationship,
-	"isNested":         isNested,
-	"maybeDereference": maybeDereference,
-	"isReference":      isReference,
-	"indexName":        getIndexName,
-	"fieldValueString": fieldValueString,
+	"hasParentMessages":                                           hasParentMessages,
+	"getParentMessageNames":                                       getParentMessageNames,
+	"getChildMessageNestedOnFieldNames":                           getChildMessageNestedOnFieldNames,
+	"hasParentMessagesWithCascadeDeleteFromChild":                 hasParentMessagesWithCascadeDeleteFromChild,
+	"getParentMessageNamesWithCascadeDeleteFromChild":             getParentMessageNamesWithCascadeDeleteFromChild,
+	"getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames": getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames,
+	"includeMessage":                                              includeMessage,
+	"includeField":                                                includeField,
+	"fieldComments":                                               fieldComments,
+	"toString":                                                    toString,
+	"toLower":                                                     strings.ToLower,
+	"isNumeric":                                                   isNumeric,
+	"isBoolean":                                                   isBoolean,
+	"isTimestamp":                                                 isTimestamp,
+	"isStructPb":                                                  isStructPb,
+	"isBytes":                                                     isBytes,
+	"isRelationship":                                              isRelationship,
+	"isNested":                                                    isNested,
+	"maybeDereference":                                            maybeDereference,
+	"isReference":                                                 isReference,
+	"indexName":                                                   getIndexName,
+	"fieldValueString":                                            fieldValueString,
+	"add":                                                         add,
 }
 
 func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*Builder, error) {
@@ -97,6 +104,7 @@ func (b *Builder) Generate() (response *pluginpb.CodeGeneratorResponse, err erro
 			}
 			fileName := protoFile.GeneratedFilenamePrefix + ".pb.elasticsearch.go"
 			f = b.plugin.NewGeneratedFile(fileName, ".")
+			initMessageMetadata(protoFile)
 			writeGlobalImports(f)
 			var data bytes.Buffer
 			templateMap := map[string]any{
@@ -130,7 +138,127 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/sirupsen/logrus"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/logging"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esutil"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/typedapi/types"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "encoding/json"})
+}
+
+type messageMeta struct {
+	// parentMessageFields is a map of parent message names to a list of field
+	// names
+	parentMessageFields map[string][]string
+
+	// parentMessageFieldsWithCascadeDeleteFromChild is a map of parent message
+	// names to a list of field names that should trigger a cascade delete of
+	// the parent message when the child message is deleted
+	parentMessageFieldsWithCascadeDeleteFromChild map[string][]string
+}
+
+// messageMetadata is a map of message name to additional metadata
+var messageMetadata map[string]*messageMeta
+
+// initMessageMetadata creates a map of message name to additional metadata,
+// which currently just contains a mapping from child message to parent message
+// in order to determine which messages need to be reindexed when a child
+// message is updated
+func initMessageMetadata(file *protogen.File) {
+	meta := map[string]*messageMeta{}
+
+	// iterate over all messages to determine which messages are nested on other messages
+	for _, message := range file.Messages {
+		messageName := message.GoIdent.GoName
+		if _, ok := meta[messageName]; !ok {
+			meta[messageName] = &messageMeta{
+				parentMessageFields:                           map[string][]string{},
+				parentMessageFieldsWithCascadeDeleteFromChild: map[string][]string{},
+			}
+		}
+
+		// check if message has nested fields
+		for _, field := range message.Fields {
+			// exclude repeated fields
+			if isNested(field) && !field.Desc.IsList() {
+				// if nested, add metadata to child message
+				childFieldTypeName := field.Message.GoIdent.GoName
+				if _, ok := meta[childFieldTypeName]; !ok {
+					meta[childFieldTypeName] = &messageMeta{
+						parentMessageFields:                           map[string][]string{},
+						parentMessageFieldsWithCascadeDeleteFromChild: map[string][]string{},
+					}
+				}
+				parentFieldName := field.GoName
+				// add parent message name to child message metadata
+				meta[childFieldTypeName].parentMessageFields[messageName] = append(meta[childFieldTypeName].parentMessageFields[messageName], parentFieldName)
+				// add parent message name to child message metadata as
+				// "delete from child" field if cascade delete is enabled
+				fieldOptions := getFieldOptions(field)
+				if fieldOptions != nil && fieldOptions.EnableCascadeDeleteFromChild {
+					meta[childFieldTypeName].parentMessageFieldsWithCascadeDeleteFromChild[messageName] = append(meta[childFieldTypeName].parentMessageFieldsWithCascadeDeleteFromChild[messageName], parentFieldName)
+				}
+			}
+		}
+	}
+
+	messageMetadata = meta
+}
+
+func hasParentMessages(message *protogen.Message) bool {
+	return len(getParentMessageNames(message)) > 0
+}
+
+func getParentMessageNames(message *protogen.Message) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		parentMessageTypes := []string{}
+		for parentMessageType := range meta.parentMessageFields {
+			parentMessageTypes = append(parentMessageTypes, parentMessageType)
+		}
+		return parentMessageTypes
+	}
+	return []string{}
+}
+
+func getChildMessageNestedOnFieldNames(message *protogen.Message, parentName string) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		if parentMessageFields, ok := meta.parentMessageFields[parentName]; ok {
+			return parentMessageFields
+		}
+	}
+	return []string{}
+}
+
+func hasParentMessagesWithCascadeDeleteFromChild(message *protogen.Message) bool {
+	return len(getParentMessageNamesWithCascadeDeleteFromChild(message)) > 0
+}
+
+func getParentMessageNamesWithCascadeDeleteFromChild(message *protogen.Message) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		cascadeDeleteFromChildFields := []string{}
+		for parentMessageType := range meta.parentMessageFieldsWithCascadeDeleteFromChild {
+			cascadeDeleteFromChildFields = append(cascadeDeleteFromChildFields, parentMessageType)
+		}
+		return cascadeDeleteFromChildFields
+	}
+	return []string{}
+}
+
+func getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames(message *protogen.Message, parentName string) []string {
+	if message == nil {
+		return []string{}
+	}
+	if meta, ok := messageMetadata[message.GoIdent.GoName]; ok {
+		if parentMessageFields, ok := meta.parentMessageFieldsWithCascadeDeleteFromChild[parentName]; ok {
+			return parentMessageFields
+		}
+	}
+	return []string{}
 }
 
 func getFieldOptions(field *protogen.Field) *elasticsearch.ElasticsearchFieldOptions {
@@ -276,4 +404,8 @@ func getIndexName(file *protogen.File) string {
 		return opts.IndexName
 	}
 	return defaultIndexName
+}
+
+func add(a, b int) int {
+	return a + b
 }
