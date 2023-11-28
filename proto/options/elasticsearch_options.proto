@@ -24,6 +24,8 @@ extend google.protobuf.MessageOptions {
 
 message elasticsearchMessageOptions {
   bool generate = 1;
+  // disableReindexRelated will disable generation of reindex related document methods
+  bool disableReindexRelated = 2;
 }
 
 // Field level specifications

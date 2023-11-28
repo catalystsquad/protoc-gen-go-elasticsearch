@@ -547,7 +547,7 @@ func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-{{ if hasParentMessages . }}
+{{ if and (hasParentMessages .) (not (hasDisableReindexRelatedOption .)) }}
 func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
@@ -564,13 +564,15 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onS
 
 	{{/* save the message to a var so that it is accessible inside of the range scope */}}
 	{{- $message := . }}
-	{{- range getParentMessageNames . }}
-	{{- $parentMessageName := . }}
-	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message . }}
-	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
-	{{- if eq $index 0 }}
+	{{- range $index, $parentMessageName := getParentMessageNames . }}
+	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message $parentMessageName }}
+	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
+	{{- if eq (add $index $index2) 0 }}
 	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- else }}
+	handled = 0
+	searchAfter = nil
+
 	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- end }}
 	for {
@@ -604,11 +606,6 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAsync(ctx context.Context, onS
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
-
-	handled = 0
-	searchAfter = nil
-	{{- end }}
 	{{- end }}
 	{{- end }}
 
@@ -622,13 +619,15 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.C
 
 	{{/* save the message to a var so that it is accessible inside of the range scope */}}
 	{{- $message := . }}
-	{{- range getParentMessageNames . }}
-	{{- $parentMessageName := . }}
-	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message . }}
-	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
-	{{- if eq $index 0 }}
+	{{- range $index, $parentMessageName := getParentMessageNames . }}
+	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message $parentMessageName }}
+	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
+	{{- if eq (add $index $index2) 0 }}
 	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- else }}
+	handled = 0
+	searchAfter = nil
+
 	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- end }}
 	for {
@@ -661,17 +660,11 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.C
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
-
-	handled = 0
-	searchAfter = nil
-	{{- end }}
 	{{- end }}
 	{{- end }}
 
 	return nil
 }
-{{- end }}
 
 {{ if hasParentMessagesWithCascadeDeleteFromChild . }}
 func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
@@ -681,13 +674,15 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 
 	{{/* save the message to a var so that it is accessible inside of the range scope */}}
 	{{- $message := . }}
-	{{- range getParentMessageNamesWithCascadeDeleteFromChild . }}
-	{{- $parentMessageName := . }}
-	{{- $childMessageNestedOnFields := getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames $message . }}
-	{{- range $index, $nestedOnField := $childMessageNestedOnFields }}
-	{{- if eq $index 0 }}
+	{{- range $index, $parentMessageName := getParentMessageNamesWithCascadeDeleteFromChild . }}
+	{{- $childMessageNestedOnFields := getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames $message $parentMessageName }}
+	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
+	{{- if eq (add $index $index2) 0 }}
 	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- else }}
+	handled = 0
+	searchAfter = nil
+
 	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
 	{{- end }}
 	for {
@@ -713,16 +708,12 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
-	{{- if ne $index (add (len $childMessageNestedOnFields) -1) }}
-
-	handled = 0
-	searchAfter = nil
-	{{- end }}
 	{{- end }}
 	{{- end }}
 
 	return nil
 }
+{{- end }}
 {{- end }}
 
 type {{ .Desc.Name }}BulkEsModel []*{{ .Desc.Name }}
