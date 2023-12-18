@@ -136,7 +136,7 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	err := thing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 	thingsProto := example_example.ThingBulkEsModel(things)
-	err = thingsProto.DeleteWithRefresh(context.Background())
+	err = thingsProto.DeleteWithRefresh(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
@@ -201,7 +201,7 @@ func (s *PluginSuite) TestBulkDelete() {
 	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
 	// delete all things
 	thingsProto := example_example.ThingBulkEsModel(things)
-	err := thingsProto.DeleteWithRefresh(context.Background())
+	err := thingsProto.DeleteWithRefresh(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 	// verify that all things were deleted
 	response := s.keywordSearch("Thing", "Id", *thing1.Id)
@@ -502,7 +502,7 @@ func (s *PluginSuite) indexThing(thing *example_example.Thing) {
 
 func (s *PluginSuite) indexThings(things []*example_example.Thing) {
 	thingsProto := example_example.ThingBulkEsModel(things)
-	err := thingsProto.IndexSyncWithRefresh(context.Background())
+	err := thingsProto.IndexSyncWithRefresh(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 

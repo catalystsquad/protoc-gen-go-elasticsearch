@@ -143,7 +143,7 @@ func IndexSync(ctx context.Context, docs []Document, refresh string) error {
 	return nil
 }
 
-func BulkIndexSync(ctx context.Context, docs []Document, refresh string) error {
+func BulkIndexSync(ctx context.Context, docs []Document, refresh string, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh(refresh)
 	if err != nil {
 		return err
@@ -160,6 +160,8 @@ func BulkIndexSync(ctx context.Context, docs []Document, refresh string) error {
 			Index:      ElasticsearchIndexName,
 			DocumentID: doc.Id,
 			Body:       bytes.NewReader(data),
+			OnSuccess:  onSuccess,
+			OnFailure:  onFailure,
 		}
 		err = reqBulkIndexer.Add(ctx, item)
 		if err != nil {
@@ -177,7 +179,7 @@ func BulkIndexSync(ctx context.Context, docs []Document, refresh string) error {
 	return nil
 }
 
-func BulkDeleteSync(ctx context.Context, ids []string, refresh string) error {
+func BulkDeleteSync(ctx context.Context, ids []string, refresh string, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh(refresh)
 	if err != nil {
 		return err
@@ -188,6 +190,8 @@ func BulkDeleteSync(ctx context.Context, ids []string, refresh string) error {
 			Action:     "delete",
 			Index:      ElasticsearchIndexName,
 			DocumentID: id,
+			OnSuccess:  onSuccess,
+			OnFailure:  onFailure,
 		}
 		err = reqBulkIndexer.Add(ctx, item)
 		if err != nil {
@@ -741,23 +745,23 @@ func (s *{{ .Desc.Name }}BulkEsModel) IndexAsync(ctx context.Context, onSuccess 
 	return QueueDocsForIndexing(ctx, docs, onSuccess, onFailure)
 }
 
-func (s *{{ .Desc.Name }}BulkEsModel) IndexSyncWithRefresh(ctx context.Context) error {
+func (s *{{ .Desc.Name }}BulkEsModel) IndexSyncWithRefresh(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
-	return BulkIndexSync(ctx, docs, "wait_for")
+	return BulkIndexSync(ctx, docs, "wait_for", onSuccess, onFailure)
 }
 
-func (s *{{ .Desc.Name }}BulkEsModel) IndexSync(ctx context.Context, refresh string) error {
+func (s *{{ .Desc.Name }}BulkEsModel) IndexSync(ctx context.Context, refresh string, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
 	}
-	return BulkIndexSync(ctx, docs, refresh)
+	return BulkIndexSync(ctx, docs, refresh, onSuccess, onFailure)
 }
 
-func (s *{{ .Desc.Name }}BulkEsModel) Delete(ctx context.Context, refresh string) error {
+func (s *{{ .Desc.Name }}BulkEsModel) Delete(ctx context.Context, refresh string, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	docs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -766,11 +770,11 @@ func (s *{{ .Desc.Name }}BulkEsModel) Delete(ctx context.Context, refresh string
 	for _, doc := range docs {
 		ids = append(ids, doc.Id)
 	}
-	return BulkDeleteSync(ctx, ids, refresh)
+	return BulkDeleteSync(ctx, ids, refresh, onSuccess, onFailure)
 }
 
-func (s *{{ .Desc.Name }}BulkEsModel) DeleteWithRefresh(ctx context.Context) error {
-	return s.Delete(ctx, "wait_for")
+func (s *{{ .Desc.Name }}BulkEsModel) DeleteWithRefresh(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	return s.Delete(ctx, "wait_for", onSuccess, onFailure)
 }
 {{- end }}
 {{- end }}
