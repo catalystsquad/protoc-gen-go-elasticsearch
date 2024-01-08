@@ -512,12 +512,12 @@ func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
 }
 
 func (s *PluginSuite) reindexThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
-	err := thing2.ReindexRelatedDocumentsAsync(context.Background(), nil, nil)
+	err := thing2.ReindexRelatedDocumentsBulk(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
 func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteAsync(thing2 *example_example.Thing2) {
-	err := thing2.ReindexRelatedDocumentsAfterDeleteAsync(context.Background(), nil, nil)
+	err := thing2.ReindexRelatedDocumentsAfterDeleteBulk(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 

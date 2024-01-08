@@ -836,7 +836,7 @@ func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -845,6 +845,12 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 		return errorx.IllegalState.New("expected exactly one es document, got %d", len(nestedDocs))
 	}
 	nestedDoc := nestedDocs[0]
+
+	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	if err != nil {
+		return err
+	}
+	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -870,8 +876,22 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 					}
 				}
 			}
-			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			data, err := json.Marshal(doc)
 			if err != nil {
+				errorutils.LogOnErr(nil, "error marshalling document to json", err)
+				return err
+			}
+			item := esutil.BulkIndexerItem{
+				Action:     "index",
+				Index:      ElasticsearchIndexName,
+				DocumentID: doc.Id,
+				Body:       bytes.NewReader(data),
+				OnSuccess:  onSuccess,
+				OnFailure:  onFailure,
+			}
+			err = reqBulkIndexer.Add(ctx, item)
+			if err != nil {
+				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
 			}
 			handled++
@@ -905,8 +925,22 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 					}
 				}
 			}
-			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			data, err := json.Marshal(doc)
 			if err != nil {
+				errorutils.LogOnErr(nil, "error marshalling document to json", err)
+				return err
+			}
+			item := esutil.BulkIndexerItem{
+				Action:     "index",
+				Index:      ElasticsearchIndexName,
+				DocumentID: doc.Id,
+				Body:       bytes.NewReader(data),
+				OnSuccess:  onSuccess,
+				OnFailure:  onFailure,
+			}
+			err = reqBulkIndexer.Add(ctx, item)
+			if err != nil {
+				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
 			}
 			handled++
@@ -921,7 +955,13 @@ func (s *Thing2) ReindexRelatedDocumentsAsync(ctx context.Context, onSuccess fun
 	return nil
 }
 
-func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	if err != nil {
+		return err
+	}
+	defer reqBulkIndexer.Close(ctx)
+
 	size := int64(100)
 	var handled int
 	var searchAfter []interface{}
@@ -945,8 +985,22 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, on
 				}
 			}
 			doc.Metadata = newMetadata
-			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			data, err := json.Marshal(doc)
 			if err != nil {
+				errorutils.LogOnErr(nil, "error marshalling document to json", err)
+				return err
+			}
+			item := esutil.BulkIndexerItem{
+				Action:     "index",
+				Index:      ElasticsearchIndexName,
+				DocumentID: doc.Id,
+				Body:       bytes.NewReader(data),
+				OnSuccess:  onSuccess,
+				OnFailure:  onFailure,
+			}
+			err = reqBulkIndexer.Add(ctx, item)
+			if err != nil {
+				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
 			}
 			handled++
@@ -979,8 +1033,22 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, on
 				}
 			}
 			doc.Metadata = newMetadata
-			err = QueueDocForIndexing(ctx, doc, onSuccess, onFailure)
+			data, err := json.Marshal(doc)
 			if err != nil {
+				errorutils.LogOnErr(nil, "error marshalling document to json", err)
+				return err
+			}
+			item := esutil.BulkIndexerItem{
+				Action:     "index",
+				Index:      ElasticsearchIndexName,
+				DocumentID: doc.Id,
+				Body:       bytes.NewReader(data),
+				OnSuccess:  onSuccess,
+				OnFailure:  onFailure,
+			}
+			err = reqBulkIndexer.Add(ctx, item)
+			if err != nil {
+				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
 			}
 			handled++
@@ -996,6 +1064,12 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteAsync(ctx context.Context, on
 }
 
 func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	if err != nil {
+		return err
+	}
+	defer reqBulkIndexer.Close(ctx)
+
 	size := int64(100)
 	var handled int
 	var searchAfter []interface{}
@@ -1011,9 +1085,16 @@ func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func
 		}
 
 		for _, hit := range res.Hits.Hits {
-			doc := hit.Source
-			err = QueueDocForDeletion(ctx, doc, onSuccess, onFailure)
+			item := esutil.BulkIndexerItem{
+				Action:     "delete",
+				Index:      ElasticsearchIndexName,
+				DocumentID: hit.Source.Id,
+				OnSuccess:  onSuccess,
+				OnFailure:  onFailure,
+			}
+			err = reqBulkIndexer.Add(ctx, item)
 			if err != nil {
+				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
 			}
 			handled++
