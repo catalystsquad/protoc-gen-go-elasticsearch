@@ -114,7 +114,7 @@ func (s *PluginSuite) TestReindexRelated() {
 	// update the associatedThing2 and reindex
 	oldName := associatedThing2.Name
 	associatedThing2.Name = "new name for TestReindexRelated"
-	s.reindexThing2RelatedDocsAsync(associatedThing2)
+	s.reindexThing2RelatedDocsBulk(associatedThing2)
 	// search for associated thing exact match
 	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
 	// ensure that the old name is not in the index
@@ -128,7 +128,7 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	// update the associatedThing2 and reindex
 	originalName := thing2.Name
 	thing2.Name = "new name for TestReindexRelatedPagination"
-	s.reindexThing2RelatedDocsAsync(thing2)
+	s.reindexThing2RelatedDocsBulk(thing2)
 	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingName", thing2.Name), count)
 	// ensure that the old name is not in the index
 	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", originalName)))
@@ -147,7 +147,7 @@ func (s *PluginSuite) TestReindexRelatedAfterDelete() {
 	// delete the associatedThing2 and reindex
 	err := associatedThing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
-	s.reindexThing2RelatedDocsAfterDeleteAsync(associatedThing2)
+	s.reindexThing2RelatedDocsAfterDeleteBulk(associatedThing2)
 	// ensure that the old id is not in the index
 	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *associatedThing2.Id), 0)
 }
@@ -511,12 +511,12 @@ func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) reindexThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
+func (s *PluginSuite) reindexThing2RelatedDocsBulk(thing2 *example_example.Thing2) {
 	err := thing2.ReindexRelatedDocumentsBulk(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteAsync(thing2 *example_example.Thing2) {
+func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteBulk(thing2 *example_example.Thing2) {
 	err := thing2.ReindexRelatedDocumentsAfterDeleteBulk(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 }

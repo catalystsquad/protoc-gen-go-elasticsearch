@@ -566,7 +566,6 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 	if err != nil {
 		return err
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -596,13 +595,23 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 
 		for _, hit := range res.Hits.Hits {
 			doc := hit.Source
+			metadataIndexByKey := map[string]int{}
+			for i := range doc.Metadata {
+				metadataIndexByKey[*doc.Metadata[i].Key] = i
+			}
+			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
 				metadata.Key = lo.ToPtr(fmt.Sprintf("{{ $nestedOnField }}%s", *metadata.Key))
-				for i := range doc.Metadata {
-					if *doc.Metadata[i].Key == *metadata.Key {
+				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
+					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
+						*doc.Metadata[i].StringValue != *metadata.StringValue {
 						doc.Metadata[i] = metadata
+						hasChanged = true
 					}
 				}
+			}
+			if !hasChanged {
+				continue
 			}
 			data, err := json.Marshal(doc)
 			if err != nil {
@@ -633,7 +642,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 	{{- end }}
 	{{- end }}
 
-	return nil
+	return reqBulkIndexer.Close(ctx)
 }
 
 func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
@@ -641,7 +650,6 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 	if err != nil {
 		return err
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -707,7 +715,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 	{{- end }}
 	{{- end }}
 
-	return nil
+	return reqBulkIndexer.Close(ctx)
 }
 
 {{ if hasParentMessagesWithCascadeDeleteFromChild . }}
@@ -716,7 +724,6 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 	if err != nil {
 		return err
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -768,7 +775,7 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 	{{- end }}
 	{{- end }}
 
-	return nil
+	return reqBulkIndexer.Close(ctx)
 }
 {{- end }}
 {{- end }}
