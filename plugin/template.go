@@ -552,7 +552,7 @@ func (s *{{ .Desc.Name }}) DeleteWithRefresh(ctx context.Context) error {
 }
 
 {{ if and (hasParentMessages .) (not (hasDisableReindexRelatedOption .)) }}
-func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -562,9 +562,13 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 	}
 	nestedDoc := nestedDocs[0]
 
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
 
 	size := int64(100)
@@ -626,7 +630,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -642,13 +646,25 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 	{{- end }}
 	{{- end }}
 
-	return reqBulkIndexer.Close(ctx)
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
+	var err error
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
 
 	size := int64(100)
@@ -699,7 +715,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -715,14 +731,26 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 	{{- end }}
 	{{- end }}
 
-	return reqBulkIndexer.Close(ctx)
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 {{ if hasParentMessagesWithCascadeDeleteFromChild . }}
-func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
+	var err error
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
 
 	size := int64(100)
@@ -759,7 +787,7 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -775,7 +803,14 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsAsync(ctx context.Context, onSu
 	{{- end }}
 	{{- end }}
 
-	return reqBulkIndexer.Close(ctx)
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 {{- end }}
 {{- end }}
