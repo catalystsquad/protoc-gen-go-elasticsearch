@@ -836,7 +836,7 @@ func (s *Thing2) DeleteWithRefresh(ctx context.Context) error {
 	return s.Delete(ctx, "wait_for")
 }
 
-func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
+func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
 	nestedDocs, err := s.ToEsDocuments()
 	if err != nil {
 		return err
@@ -846,11 +846,14 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 	}
 	nestedDoc := nestedDocs[0]
 
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -868,13 +871,23 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 
 		for _, hit := range res.Hits.Hits {
 			doc := hit.Source
+			metadataIndexByKey := map[string]int{}
+			for i := range doc.Metadata {
+				metadataIndexByKey[*doc.Metadata[i].Key] = i
+			}
+			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
 				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThing%s", *metadata.Key))
-				for i := range doc.Metadata {
-					if *doc.Metadata[i].Key == *metadata.Key {
+				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
+					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
+						*doc.Metadata[i].StringValue != *metadata.StringValue {
 						doc.Metadata[i] = metadata
+						hasChanged = true
 					}
 				}
+			}
+			if !hasChanged {
+				continue
 			}
 			data, err := json.Marshal(doc)
 			if err != nil {
@@ -889,7 +902,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -917,13 +930,23 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 
 		for _, hit := range res.Hits.Hits {
 			doc := hit.Source
+			metadataIndexByKey := map[string]int{}
+			for i := range doc.Metadata {
+				metadataIndexByKey[*doc.Metadata[i].Key] = i
+			}
+			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
 				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThingWithCascadeDelete%s", *metadata.Key))
-				for i := range doc.Metadata {
-					if *doc.Metadata[i].Key == *metadata.Key {
+				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
+					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
+						*doc.Metadata[i].StringValue != *metadata.StringValue {
 						doc.Metadata[i] = metadata
+						hasChanged = true
 					}
 				}
+			}
+			if !hasChanged {
+				continue
 			}
 			data, err := json.Marshal(doc)
 			if err != nil {
@@ -938,7 +961,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -952,15 +975,26 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
 
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
+	var err error
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -998,7 +1032,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -1046,7 +1080,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -1060,15 +1094,26 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
 	}
 
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error)) error {
-	reqBulkIndexer, err := newRequestBulkIndexerWithRefresh("wait_for")
-	if err != nil {
-		return err
+func (s *Thing2) DeleteRelatedDocumentsBulk(ctx context.Context, onSuccess func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem), onFailure func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error), bulkIndexer esutil.BulkIndexer) error {
+	var err error
+	var createdBulkIndexer bool
+	if bulkIndexer == nil {
+		bulkIndexer, err = newRequestBulkIndexerWithRefresh("wait_for")
+		if err != nil {
+			return err
+		}
+		createdBulkIndexer = true
 	}
-	defer reqBulkIndexer.Close(ctx)
 
 	size := int64(100)
 	var handled int
@@ -1092,7 +1137,7 @@ func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func
 				OnSuccess:  onSuccess,
 				OnFailure:  onFailure,
 			}
-			err = reqBulkIndexer.Add(ctx, item)
+			err = bulkIndexer.Add(ctx, item)
 			if err != nil {
 				errorutils.LogOnErr(nil, "error adding item to request bulk indexer", err)
 				return err
@@ -1104,6 +1149,13 @@ func (s *Thing2) DeleteRelatedDocumentsAsync(ctx context.Context, onSuccess func
 			break
 		}
 		searchAfter = res.Hits.Hits[len(res.Hits.Hits)-1].Sort
+	}
+
+	if createdBulkIndexer {
+		err = bulkIndexer.Close(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

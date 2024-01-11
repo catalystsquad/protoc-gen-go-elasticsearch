@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/catalystsquad/app-utils-go/errorutils"
 	example_example "github.com/catalystsquad/protoc-gen-go-elasticsearch/example"
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/elastic"
 	"github.com/stretchr/testify/require"
@@ -114,7 +116,7 @@ func (s *PluginSuite) TestReindexRelated() {
 	// update the associatedThing2 and reindex
 	oldName := associatedThing2.Name
 	associatedThing2.Name = "new name for TestReindexRelated"
-	s.reindexThing2RelatedDocsAsync(associatedThing2)
+	s.reindexThing2RelatedDocsBulk(associatedThing2)
 	// search for associated thing exact match
 	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
 	// ensure that the old name is not in the index
@@ -128,7 +130,7 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	// update the associatedThing2 and reindex
 	originalName := thing2.Name
 	thing2.Name = "new name for TestReindexRelatedPagination"
-	s.reindexThing2RelatedDocsAsync(thing2)
+	s.reindexThing2RelatedDocsBulk(thing2)
 	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingName", thing2.Name), count)
 	// ensure that the old name is not in the index
 	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", originalName)))
@@ -140,6 +142,33 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	require.NoError(s.T(), err)
 }
 
+func (s *PluginSuite) TestReindexRelatedWithCustomBulkIndexer() {
+	// created two of each object and update both using a shared bulk indexer
+	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2()
+	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2()
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", firstAssociatedThing2.Name, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", secondAssociatedThing2.Name, *secondThing.Id)
+	// update the associatedThing2 and reindex
+	firstOldName := firstAssociatedThing2.Name
+	firstAssociatedThing2.Name = "new name1 for TestReindexRelated"
+	secondOldName := secondAssociatedThing2.Name
+	secondAssociatedThing2.Name = "new name2 for TestReindexRelated"
+	// create a bulk indexer and handle both reindex calls with the same indexer
+	indexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	require.NoError(s.T(), err)
+	s.reindexThing2RelatedDocsBulkWithCustomIndexer(firstAssociatedThing2, indexer)
+	s.reindexThing2RelatedDocsBulkWithCustomIndexer(secondAssociatedThing2, indexer)
+	err = indexer.Close(context.Background())
+	require.NoError(s.T(), err)
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", firstAssociatedThing2.Name, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "AssociatedThingName", secondAssociatedThing2.Name, *secondThing.Id)
+	// ensure that the old name is not in the index
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", firstOldName)))
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", secondOldName)))
+}
+
 func (s *PluginSuite) TestReindexRelatedAfterDelete() {
 	thing, associatedThing2 := s.indexRandomThingAndThing2()
 	// search for associated thing exact match
@@ -147,9 +176,32 @@ func (s *PluginSuite) TestReindexRelatedAfterDelete() {
 	// delete the associatedThing2 and reindex
 	err := associatedThing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
-	s.reindexThing2RelatedDocsAfterDeleteAsync(associatedThing2)
+	s.reindexThing2RelatedDocsAfterDeleteBulk(associatedThing2)
 	// ensure that the old id is not in the index
 	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *associatedThing2.Id), 0)
+}
+
+func (s *PluginSuite) TestReindexRelatedAfterDeleteWithCustomBulkIndexer() {
+	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2()
+	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2()
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingId", *firstAssociatedThing2.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "AssociatedThingId", *secondAssociatedThing2.Id, *secondThing.Id)
+	// delete the associatedThing2 and reindex
+	bulkModel := example_example.ThingBulkEsModel([]*example_example.Thing{firstThing, secondThing})
+	err := bulkModel.DeleteWithRefresh(context.Background(), nil, nil)
+	require.NoError(s.T(), err)
+	// create a bulk indexer and handle both reindex calls with the same indexer
+	indexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	require.NoError(s.T(), err)
+	s.reindexThing2RelatedDocsAfterDeleteBulkWithCustomIndexer(firstAssociatedThing2, indexer)
+	s.reindexThing2RelatedDocsAfterDeleteBulkWithCustomIndexer(secondAssociatedThing2, indexer)
+	err = indexer.Close(context.Background())
+	require.NoError(s.T(), err)
+	// ensure that the old id is not in the index
+	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *firstAssociatedThing2.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *secondAssociatedThing2.Id), 0)
+
 }
 
 func (s *PluginSuite) TestDeleteRelated() {
@@ -160,9 +212,33 @@ func (s *PluginSuite) TestDeleteRelated() {
 	// delete the associatedThing2 and call delete related
 	err := associatedThing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
-	s.deleteThing2RelatedDocsAsync(associatedThing2)
+	s.deleteThing2RelatedDocsBulk(associatedThing2)
 	// ensure that thing1 is not in the index
 	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *thing.Id), 0)
+}
+
+func (s *PluginSuite) TestDeleteRelatedWithCustomBulkIndexer() {
+	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
+	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
+	s.eventualKeywordSearch("Thing", "Id", *firstThing.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "Id", *secondThing.Id, *secondThing.Id)
+	// search for associated thing exact match
+	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *firstAssociatedThing2.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *secondAssociatedThing2.Id, *secondThing.Id)
+	// delete the associatedThing2 and call delete related
+	bulkModel := example_example.Thing2BulkEsModel([]*example_example.Thing2{firstAssociatedThing2, secondAssociatedThing2})
+	err := bulkModel.DeleteWithRefresh(context.Background(), nil, nil)
+	require.NoError(s.T(), err)
+	// create a bulk indexer and handle both reindex calls with the same indexer
+	indexer, err := newRequestBulkIndexerWithRefresh("wait_for")
+	require.NoError(s.T(), err)
+	s.deleteThing2RelatedDocsBulkWithCustomIndexer(firstAssociatedThing2, indexer)
+	s.deleteThing2RelatedDocsBulkWithCustomIndexer(secondAssociatedThing2, indexer)
+	err = indexer.Close(context.Background())
+	require.NoError(s.T(), err)
+	// ensure that thing1 is not in the index
+	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *firstThing.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *secondThing.Id), 0)
 }
 
 func (s *PluginSuite) TestDelete() {
@@ -511,18 +587,33 @@ func (s *PluginSuite) indexThing2(thing2 *example_example.Thing2) {
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) reindexThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
-	err := thing2.ReindexRelatedDocumentsBulk(context.Background(), nil, nil)
+func (s *PluginSuite) reindexThing2RelatedDocsBulk(thing2 *example_example.Thing2) {
+	err := thing2.ReindexRelatedDocumentsBulk(context.Background(), nil, nil, nil)
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteAsync(thing2 *example_example.Thing2) {
-	err := thing2.ReindexRelatedDocumentsAfterDeleteBulk(context.Background(), nil, nil)
+func (s *PluginSuite) reindexThing2RelatedDocsBulkWithCustomIndexer(thing2 *example_example.Thing2, indexer esutil.BulkIndexer) {
+	err := thing2.ReindexRelatedDocumentsBulk(context.Background(), nil, nil, indexer)
 	require.NoError(s.T(), err)
 }
 
-func (s *PluginSuite) deleteThing2RelatedDocsAsync(thing2 *example_example.Thing2) {
-	err := thing2.DeleteRelatedDocumentsAsync(context.Background(), nil, nil)
+func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteBulk(thing2 *example_example.Thing2) {
+	err := thing2.ReindexRelatedDocumentsAfterDeleteBulk(context.Background(), nil, nil, nil)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) reindexThing2RelatedDocsAfterDeleteBulkWithCustomIndexer(thing2 *example_example.Thing2, indexer esutil.BulkIndexer) {
+	err := thing2.ReindexRelatedDocumentsAfterDeleteBulk(context.Background(), nil, nil, indexer)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) deleteThing2RelatedDocsBulk(thing2 *example_example.Thing2) {
+	err := thing2.DeleteRelatedDocumentsBulk(context.Background(), nil, nil, nil)
+	require.NoError(s.T(), err)
+}
+
+func (s *PluginSuite) deleteThing2RelatedDocsBulkWithCustomIndexer(thing2 *example_example.Thing2, indexer esutil.BulkIndexer) {
+	err := thing2.DeleteRelatedDocumentsBulk(context.Background(), nil, nil, indexer)
 	require.NoError(s.T(), err)
 }
 
@@ -621,4 +712,16 @@ func (s *PluginSuite) search(query string) string {
 	body, err := io.ReadAll(response.Body)
 	require.NoError(s.T(), err)
 	return string(body)
+}
+
+func newRequestBulkIndexerWithRefresh(refresh string) (esutil.BulkIndexer, error) {
+	return esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+		Client:     example_example.ElasticsearchClient,
+		Index:      example_example.ElasticsearchIndexName,
+		NumWorkers: 1,
+		Refresh:    refresh,
+		OnError: func(ctx context.Context, err error) {
+			errorutils.LogOnErr(nil, "error encountered in bulk indexer", err)
+		},
+	})
 }
