@@ -43,84 +43,84 @@ func (s *PluginSuite) SetupSuite() {
 func (s *PluginSuite) TestSearchById() {
 	thing := s.generateRandomThing()
 	s.indexThing(thing)
-	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing.Id, *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchEnum() {
 	thing := s.generateRandomThing()
 	s.indexThing(thing)
-	s.eventualKeywordSearch("Thing", "AnEnum", thing.AnEnum.String(), *thing.Id)
-	s.eventualLongSearch("Thing", "AnEnum", *thing.Id, int(thing.AnEnum.Number()))
+	s.eventualKeywordSearch("Thing", "anEnum", thing.AnEnum.String(), *thing.Id)
+	s.eventualLongSearch("Thing", "anEnum", *thing.Id, int(thing.AnEnum.Number()))
 }
 
 func (s *PluginSuite) TestSearchStringValue() {
 	thing := s.generateRandomThing()
 	thing.AString = "i like turtles and elephants because they're neat"
 	s.indexThing(thing)
-	s.eventualStringSearch("Thing", "AString", thing.AString, *thing.Id)
+	s.eventualStringSearch("Thing", "astring", thing.AString, *thing.Id)
 	// test partial
-	s.eventualStringSearch("Thing", "AString", "turtles", *thing.Id)
+	s.eventualStringSearch("Thing", "astring", "turtles", *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchLongValue() {
 	thing := s.indexRandomThing()
-	s.eventualLongSearch("Thing", "AnInt32", *thing.Id, int(thing.AnInt32))
-	s.eventualStringSearch("Thing", "AnInt32", fmt.Sprintf("%d", thing.AnInt32), *thing.Id)
-	s.eventualLongSearch("Thing", "AnInt64", *thing.Id, int(thing.AnInt64))
-	s.eventualStringSearch("Thing", "AnInt64", fmt.Sprintf("%d", thing.AnInt64), *thing.Id)
+	s.eventualLongSearch("Thing", "anInt32", *thing.Id, int(thing.AnInt32))
+	s.eventualStringSearch("Thing", "anInt32", fmt.Sprintf("%d", thing.AnInt32), *thing.Id)
+	s.eventualLongSearch("Thing", "anInt64", *thing.Id, int(thing.AnInt64))
+	s.eventualStringSearch("Thing", "anInt64", fmt.Sprintf("%d", thing.AnInt64), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchDoubleValue() {
 	thing := s.indexRandomThing()
-	s.eventualDoubleSearch("Thing", "ADouble", *thing.Id, thing.ADouble)
-	s.eventualStringSearch("Thing", "ADouble", fmt.Sprintf("%v", thing.ADouble), *thing.Id)
+	s.eventualDoubleSearch("Thing", "adouble", *thing.Id, thing.ADouble)
+	s.eventualStringSearch("Thing", "adouble", fmt.Sprintf("%v", thing.ADouble), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchDateValue() {
 	thing := s.indexRandomThing()
-	s.eventualDateSearch("Thing", "ATimestamp", *thing.Id, thing.ATimestamp.AsTime())
+	s.eventualDateSearch("Thing", "atimestamp", *thing.Id, thing.ATimestamp.AsTime())
 }
 
 func (s *PluginSuite) TestSearchBoolValue() {
 	thing := s.indexRandomThing()
-	s.eventualBoolSearch("Thing", "ABool", *thing.Id, thing.ABool)
-	s.eventualStringSearch("Thing", "ABool", fmt.Sprintf("%t", thing.ABool), *thing.Id)
+	s.eventualBoolSearch("Thing", "abool", *thing.Id, thing.ABool)
+	s.eventualStringSearch("Thing", "abool", fmt.Sprintf("%t", thing.ABool), *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchKeywordValue() {
 	thing := s.indexRandomThing()
-	s.eventualKeywordSearch("Thing", "AString", thing.AString, *thing.Id)
+	s.eventualKeywordSearch("Thing", "astring", thing.AString, *thing.Id)
 }
 
 func (s *PluginSuite) TestSearchRepeatedValue() {
 	thing := s.indexRandomThing()
 	require.GreaterOrEqual(s.T(), len(thing.RepeatedInt32), 1)
 	for _, num := range thing.RepeatedInt32 {
-		s.eventualLongSearch("Thing", "RepeatedInt32", *thing.Id, int(num))
+		s.eventualLongSearch("Thing", "repeatedInt32", *thing.Id, int(num))
 	}
 }
 
 func (s *PluginSuite) TestSearchNestedObject() {
 	thing := s.indexRandomThingWithRelationships()
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", thing.AssociatedThing.Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", thing.AssociatedThing.Name, *thing.Id)
 	//// search for repeated relationship objects
-	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[0].Name, *thing.Id)
-	s.eventualKeywordSearch("Thing", "RepeatedMessagesName", thing.RepeatedMessages[1].Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "repeatedMessages.name", thing.RepeatedMessages[0].Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "repeatedMessages.name", thing.RepeatedMessages[1].Name, *thing.Id)
 }
 
 func (s *PluginSuite) TestReindexRelated() {
 	thing, associatedThing2 := s.indexRandomThingAndThing2()
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", associatedThing2.Name, *thing.Id)
 	// update the associatedThing2 and reindex
 	oldName := associatedThing2.Name
 	associatedThing2.Name = "new name for TestReindexRelated"
 	s.reindexThing2RelatedDocsBulk(associatedThing2)
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", associatedThing2.Name, *thing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", associatedThing2.Name, *thing.Id)
 	// ensure that the old name is not in the index
-	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", oldName)))
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "associatedThing.name", oldName)))
 }
 
 func (s *PluginSuite) TestReindexRelatedPagination() {
@@ -131,9 +131,9 @@ func (s *PluginSuite) TestReindexRelatedPagination() {
 	originalName := thing2.Name
 	thing2.Name = "new name for TestReindexRelatedPagination"
 	s.reindexThing2RelatedDocsBulk(thing2)
-	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingName", thing2.Name), count)
+	s.eventualSearchCount(getKeywordQuery("Thing", "associatedThing.name", thing2.Name), count)
 	// ensure that the old name is not in the index
-	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", originalName)))
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "associatedThing.name", originalName)))
 	// cleanup so that the excessive amount of left over docs don't affect other tests
 	err := thing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
@@ -147,8 +147,8 @@ func (s *PluginSuite) TestReindexRelatedWithCustomBulkIndexer() {
 	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2()
 	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2()
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", firstAssociatedThing2.Name, *firstThing.Id)
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", secondAssociatedThing2.Name, *secondThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", firstAssociatedThing2.Name, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", secondAssociatedThing2.Name, *secondThing.Id)
 	// update the associatedThing2 and reindex
 	firstOldName := firstAssociatedThing2.Name
 	firstAssociatedThing2.Name = "new name1 for TestReindexRelated"
@@ -162,31 +162,31 @@ func (s *PluginSuite) TestReindexRelatedWithCustomBulkIndexer() {
 	err = indexer.Close(context.Background())
 	require.NoError(s.T(), err)
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", firstAssociatedThing2.Name, *firstThing.Id)
-	s.eventualKeywordSearch("Thing", "AssociatedThingName", secondAssociatedThing2.Name, *secondThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", firstAssociatedThing2.Name, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.name", secondAssociatedThing2.Name, *secondThing.Id)
 	// ensure that the old name is not in the index
-	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", firstOldName)))
-	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "AssociatedThingName", secondOldName)))
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "associatedThing.name", firstOldName)))
+	require.Equal(s.T(), 0, s.searchCount(getKeywordQuery("Thing", "associatedThing.name", secondOldName)))
 }
 
 func (s *PluginSuite) TestReindexRelatedAfterDelete() {
 	thing, associatedThing2 := s.indexRandomThingAndThing2()
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingId", *associatedThing2.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.id", *associatedThing2.Id, *thing.Id)
 	// delete the associatedThing2 and reindex
 	err := associatedThing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 	s.reindexThing2RelatedDocsAfterDeleteBulk(associatedThing2)
 	// ensure that the old id is not in the index
-	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *associatedThing2.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "associatedThing.id", *associatedThing2.Id), 0)
 }
 
 func (s *PluginSuite) TestReindexRelatedAfterDeleteWithCustomBulkIndexer() {
 	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2()
 	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2()
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingId", *firstAssociatedThing2.Id, *firstThing.Id)
-	s.eventualKeywordSearch("Thing", "AssociatedThingId", *secondAssociatedThing2.Id, *secondThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.id", *firstAssociatedThing2.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThing.id", *secondAssociatedThing2.Id, *secondThing.Id)
 	// delete the associatedThing2 and reindex
 	bulkModel := example_example.ThingBulkEsModel([]*example_example.Thing{firstThing, secondThing})
 	err := bulkModel.DeleteWithRefresh(context.Background(), nil, nil)
@@ -199,32 +199,32 @@ func (s *PluginSuite) TestReindexRelatedAfterDeleteWithCustomBulkIndexer() {
 	err = indexer.Close(context.Background())
 	require.NoError(s.T(), err)
 	// ensure that the old id is not in the index
-	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *firstAssociatedThing2.Id), 0)
-	s.eventualSearchCount(getKeywordQuery("Thing", "AssociatedThingId", *secondAssociatedThing2.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "associatedThing.id", *firstAssociatedThing2.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "associatedThing.id", *secondAssociatedThing2.Id), 0)
 
 }
 
 func (s *PluginSuite) TestDeleteRelated() {
 	thing, associatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
-	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing.Id, *thing.Id)
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *associatedThing2.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThingWithCascadeDelete.id", *associatedThing2.Id, *thing.Id)
 	// delete the associatedThing2 and call delete related
 	err := associatedThing2.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
 	s.deleteThing2RelatedDocsBulk(associatedThing2)
 	// ensure that thing1 is not in the index
-	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *thing.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "id", *thing.Id), 0)
 }
 
 func (s *PluginSuite) TestDeleteRelatedWithCustomBulkIndexer() {
 	firstThing, firstAssociatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
 	secondThing, secondAssociatedThing2 := s.indexRandomThingAndThing2viaWithCascadeDelete()
-	s.eventualKeywordSearch("Thing", "Id", *firstThing.Id, *firstThing.Id)
-	s.eventualKeywordSearch("Thing", "Id", *secondThing.Id, *secondThing.Id)
+	s.eventualKeywordSearch("Thing", "id", *firstThing.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "id", *secondThing.Id, *secondThing.Id)
 	// search for associated thing exact match
-	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *firstAssociatedThing2.Id, *firstThing.Id)
-	s.eventualKeywordSearch("Thing", "AssociatedThingWithCascadeDeleteId", *secondAssociatedThing2.Id, *secondThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThingWithCascadeDelete.id", *firstAssociatedThing2.Id, *firstThing.Id)
+	s.eventualKeywordSearch("Thing", "associatedThingWithCascadeDelete.id", *secondAssociatedThing2.Id, *secondThing.Id)
 	// delete the associatedThing2 and call delete related
 	bulkModel := example_example.Thing2BulkEsModel([]*example_example.Thing2{firstAssociatedThing2, secondAssociatedThing2})
 	err := bulkModel.DeleteWithRefresh(context.Background(), nil, nil)
@@ -237,16 +237,16 @@ func (s *PluginSuite) TestDeleteRelatedWithCustomBulkIndexer() {
 	err = indexer.Close(context.Background())
 	require.NoError(s.T(), err)
 	// ensure that thing1 is not in the index
-	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *firstThing.Id), 0)
-	s.eventualSearchCount(getKeywordQuery("Thing", "Id", *secondThing.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "id", *firstThing.Id), 0)
+	s.eventualSearchCount(getKeywordQuery("Thing", "id", *secondThing.Id), 0)
 }
 
 func (s *PluginSuite) TestDelete() {
 	thing := s.indexRandomThing()
-	s.eventualKeywordSearch("Thing", "Id", *thing.Id, *thing.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing.Id, *thing.Id)
 	err := thing.DeleteWithRefresh(context.Background())
 	require.NoError(s.T(), err)
-	response := s.keywordSearch("Thing", "Id", *thing.Id)
+	response := s.keywordSearch("Thing", "id", *thing.Id)
 	require.NotContains(s.T(), response, *thing.Id)
 }
 
@@ -254,7 +254,7 @@ func (s *PluginSuite) TestIndexSyncWithRefresh() {
 	thing := s.generateRandomThing()
 	err := thing.IndexSyncWithRefresh(context.Background())
 	require.NoError(s.T(), err)
-	response := s.keywordSearch("Thing", "Id", *thing.Id)
+	response := s.keywordSearch("Thing", "id", *thing.Id)
 	require.Contains(s.T(), response, *thing.Id)
 }
 
@@ -263,28 +263,28 @@ func (s *PluginSuite) TestBulkIndex() {
 	s.indexThings(things)
 	// do a simple search by id to verify that all things were indexed
 	thing1, thing2, thing3 := things[0], things[1], things[2]
-	s.eventualKeywordSearch("Thing", "Id", *thing1.Id, *thing1.Id)
-	s.eventualKeywordSearch("Thing", "Id", *thing2.Id, *thing2.Id)
-	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing1.Id, *thing1.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing2.Id, *thing2.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing3.Id, *thing3.Id)
 }
 
 func (s *PluginSuite) TestBulkDelete() {
 	things := s.generateRandomThings(3)
 	s.indexThings(things)
 	thing1, thing2, thing3 := things[0], things[1], things[2]
-	s.eventualKeywordSearch("Thing", "Id", *thing1.Id, *thing1.Id)
-	s.eventualKeywordSearch("Thing", "Id", *thing2.Id, *thing2.Id)
-	s.eventualKeywordSearch("Thing", "Id", *thing3.Id, *thing3.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing1.Id, *thing1.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing2.Id, *thing2.Id)
+	s.eventualKeywordSearch("Thing", "id", *thing3.Id, *thing3.Id)
 	// delete all things
 	thingsProto := example_example.ThingBulkEsModel(things)
 	err := thingsProto.DeleteWithRefresh(context.Background(), nil, nil)
 	require.NoError(s.T(), err)
 	// verify that all things were deleted
-	response := s.keywordSearch("Thing", "Id", *thing1.Id)
+	response := s.keywordSearch("Thing", "id", *thing1.Id)
 	require.NotContains(s.T(), response, *thing1.Id)
-	response = s.keywordSearch("Thing", "Id", *thing2.Id)
+	response = s.keywordSearch("Thing", "id", *thing2.Id)
 	require.NotContains(s.T(), response, *thing2.Id)
-	response = s.keywordSearch("Thing", "Id", *thing3.Id)
+	response = s.keywordSearch("Thing", "id", *thing3.Id)
 	require.NotContains(s.T(), response, *thing3.Id)
 }
 

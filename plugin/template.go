@@ -426,7 +426,7 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 			{{ if .Desc.IsList }}
 			for _, val := range s.{{ .GoName }} {
 				metaData := Metadata{
-				Key: lo.ToPtr("{{ .GoName }}"),
+				Key: lo.ToPtr("{{ getKey . }}"),
 				{{ if eq (isTimestamp .) false }}
 				StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
 				KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
@@ -446,7 +446,7 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 			}
 			{{ else }}
 			{{ .GoName}}MetaData := Metadata{
-				Key: lo.ToPtr("{{ .GoName }}"),
+				Key: lo.ToPtr("{{ getKey . }}"),
 				{{ if eq (isTimestamp .) false }}
 				StringValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
 				KeywordValue: lo.ToPtr(fmt.Sprintf("%v", {{ fieldValueString . }})),
@@ -478,7 +478,7 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 				}
 				for _, messageDoc := range messageDocs {
 					for _, metadata := range messageDoc.Metadata {
-						metadata.Key = lo.ToPtr(fmt.Sprintf("{{ .GoName }}%s", *metadata.Key))
+						metadata.Key = lo.ToPtr(fmt.Sprintf("{{ getKey . }}%s%s", "{{ nestedFieldSeparator }}", *metadata.Key))
 						doc.Metadata = append(doc.Metadata, metadata)
 					}
 				}
@@ -490,7 +490,7 @@ func (s *{{ .Desc.Name }}) ToEsDocuments() ([]Document, error) {
 				}
 				for _, {{ .GoName }}Doc := range {{ .GoName }}Docs {
 					for _, metadata := range {{ .GoName }}Doc.Metadata {
-						metadata.Key = lo.ToPtr(fmt.Sprintf("{{ .GoName }}%s", *metadata.Key))
+						metadata.Key = lo.ToPtr(fmt.Sprintf("{{ getKey . }}%s%s", "{{ nestedFieldSeparator }}", *metadata.Key))
 						doc.Metadata = append(doc.Metadata, metadata)
 					}
 				}
@@ -581,12 +581,12 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message $parentMessageName }}
 	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
 	{{- if eq (add $index $index2) 0 }}
-	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- else }}
 	handled = 0
 	searchAfter = nil
 
-	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- end }}
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
@@ -605,7 +605,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsBulk(ctx context.Context, onSu
 			}
 			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
-				metadata.Key = lo.ToPtr(fmt.Sprintf("{{ $nestedOnField }}%s", *metadata.Key))
+                metadata.Key = lo.ToPtr(fmt.Sprintf("{{ maybeLowerCamelFieldName $nestedOnField }}%s%s", "{{ nestedFieldSeparator }}", *metadata.Key))
 				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
 					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
 						*doc.Metadata[i].StringValue != *metadata.StringValue {
@@ -677,12 +677,12 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 	{{- $childMessageNestedOnFields := getChildMessageNestedOnFieldNames $message $parentMessageName }}
 	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
 	{{- if eq (add $index $index2) 0 }}
-	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- else }}
 	handled = 0
 	searchAfter = nil
 
-	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- end }}
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
@@ -697,7 +697,7 @@ func (s *{{ .Desc.Name }}) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Co
 			doc := hit.Source
 			newMetadata := []Metadata{}
 			for i := range doc.Metadata {
-				if !strings.HasPrefix(*doc.Metadata[i].Key, "{{ $nestedOnField }}") {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "{{ maybeLowerCamelFieldName $nestedOnField }}") {
 					newMetadata = append(newMetadata, doc.Metadata[i])
 				}
 			}
@@ -763,12 +763,12 @@ func (s *{{ .Desc.Name }}) DeleteRelatedDocumentsBulk(ctx context.Context, onSuc
 	{{- $childMessageNestedOnFields := getChildMessageWithCascadeDeleteFromChildNestedOnFieldNames $message $parentMessageName }}
 	{{- range $index2, $nestedOnField := $childMessageNestedOnFields }}
 	{{- if eq (add $index $index2) 0 }}
-	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query := getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- else }}
 	handled = 0
 	searchAfter = nil
 
-	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ . }}Id", *s.Id)
+	query = getKeywordQuery({{ $parentMessageName }}EsType, "{{ maybeLowerCamelFieldName . }}.id", *s.Id)
 	{{- end }}
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)

@@ -3,16 +3,17 @@ package plugin
 import (
 	"bytes"
 	"fmt"
+	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
+	"github.com/iancoleman/strcase"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"reflect"
 	"strings"
 	"text/template"
 
-	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/compiler/protogen"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
@@ -54,6 +55,9 @@ var templateFuncs = map[string]any{
 	"indexName":                                                   getIndexName,
 	"fieldValueString":                                            fieldValueString,
 	"add":                                                         add,
+	"nestedFieldSeparator":                                        getNestedFieldSeparator,
+	"getKey":                                                      getKey,
+	"maybeLowerCamelFieldName":                                    maybeLowerCamelFieldName,
 }
 
 func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*Builder, error) {
@@ -410,6 +414,22 @@ func fieldValueString(field *protogen.Field) string {
 		return fmt.Sprintf("lo.FromPtr(%s)", name)
 	}
 	return name
+}
+
+func getNestedFieldSeparator() string {
+	return *NestedFieldSeparator
+}
+
+func maybeLowerCamelFieldName(name string) string {
+	if *LowerCamelCaseFieldNames {
+		name = strcase.ToLowerCamel(name)
+	}
+
+	return name
+}
+
+func getKey(field *protogen.Field) string {
+	return maybeLowerCamelFieldName(field.GoName)
 }
 
 func isReference(field *protogen.Field) bool {
