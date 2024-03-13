@@ -8,6 +8,8 @@ plugins:
     out: .
     opt:
       - paths=source_relative
+      - nestedFieldSeparator=.
+      - lowerCamelCaseFieldNames=true
   - name: go-json
     out: .
     opt:

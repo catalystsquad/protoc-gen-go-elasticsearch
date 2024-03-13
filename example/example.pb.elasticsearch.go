@@ -433,7 +433,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	if s.Id != nil {
 
 		IdMetaData := Metadata{
-			Key: lo.ToPtr("Id"),
+			Key: lo.ToPtr("id"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
@@ -444,7 +444,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	}
 
 	ADoubleMetaData := Metadata{
-		Key: lo.ToPtr("ADouble"),
+		Key: lo.ToPtr("adouble"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ADouble)),
@@ -456,7 +456,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, ADoubleMetaData)
 
 	AFloatMetaData := Metadata{
-		Key: lo.ToPtr("AFloat"),
+		Key: lo.ToPtr("afloat"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AFloat)),
@@ -468,7 +468,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, AFloatMetaData)
 
 	AnInt32MetaData := Metadata{
-		Key: lo.ToPtr("AnInt32"),
+		Key: lo.ToPtr("anInt32"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt32)),
@@ -480,7 +480,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt32MetaData)
 
 	AnInt64MetaData := Metadata{
-		Key: lo.ToPtr("AnInt64"),
+		Key: lo.ToPtr("anInt64"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnInt64)),
@@ -492,7 +492,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, AnInt64MetaData)
 
 	ABoolMetaData := Metadata{
-		Key: lo.ToPtr("ABool"),
+		Key: lo.ToPtr("abool"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.ABool)),
@@ -503,7 +503,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, ABoolMetaData)
 
 	AStringMetaData := Metadata{
-		Key: lo.ToPtr("AString"),
+		Key: lo.ToPtr("astring"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AString)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AString)),
@@ -513,7 +513,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	for _, val := range s.RepeatedScalarField {
 		metaData := Metadata{
-			Key: lo.ToPtr("RepeatedScalarField"),
+			Key: lo.ToPtr("repeatedScalarField"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", val)),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", val)),
@@ -525,7 +525,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	if s.OptionalScalarField != nil {
 
 		OptionalScalarFieldMetaData := Metadata{
-			Key: lo.ToPtr("OptionalScalarField"),
+			Key: lo.ToPtr("optionalScalarField"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.OptionalScalarField))),
@@ -543,7 +543,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 		}
 		for _, AssociatedThingDoc := range AssociatedThingDocs {
 			for _, metadata := range AssociatedThingDoc.Metadata {
-				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThing%s", *metadata.Key))
+				metadata.Key = lo.ToPtr(fmt.Sprintf("associatedThing%s%s", ".", *metadata.Key))
 				doc.Metadata = append(doc.Metadata, metadata)
 			}
 		}
@@ -559,7 +559,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 			}
 			for _, messageDoc := range messageDocs {
 				for _, metadata := range messageDoc.Metadata {
-					metadata.Key = lo.ToPtr(fmt.Sprintf("RepeatedMessages%s", *metadata.Key))
+					metadata.Key = lo.ToPtr(fmt.Sprintf("repeatedMessages%s%s", ".", *metadata.Key))
 					doc.Metadata = append(doc.Metadata, metadata)
 				}
 			}
@@ -568,7 +568,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	}
 
 	ATimestampMetaData := Metadata{
-		Key: lo.ToPtr("ATimestamp"),
+		Key: lo.ToPtr("atimestamp"),
 	}
 
 	ATimestampMetaData.DateValue = lo.ToPtr(s.ATimestamp.AsTime().UTC().UnixMilli())
@@ -576,7 +576,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	doc.Metadata = append(doc.Metadata, ATimestampMetaData)
 
 	AnEnumMetaData := Metadata{
-		Key: lo.ToPtr("AnEnum"),
+		Key: lo.ToPtr("anEnum"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.AnEnum)),
@@ -589,7 +589,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	if s.AnOptionalInt != nil {
 
 		AnOptionalIntMetaData := Metadata{
-			Key: lo.ToPtr("AnOptionalInt"),
+			Key: lo.ToPtr("anOptionalInt"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.AnOptionalInt))),
@@ -605,7 +605,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 	if s.OptionalTimestamp != nil {
 
 		OptionalTimestampMetaData := Metadata{
-			Key: lo.ToPtr("OptionalTimestamp"),
+			Key: lo.ToPtr("optionalTimestamp"),
 		}
 
 		OptionalTimestampMetaData.DateValue = lo.ToPtr(s.OptionalTimestamp.AsTime().UTC().UnixMilli())
@@ -616,7 +616,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 
 	for _, val := range s.RepeatedInt32 {
 		metaData := Metadata{
-			Key: lo.ToPtr("RepeatedInt32"),
+			Key: lo.ToPtr("repeatedInt32"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", val)),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", val)),
@@ -636,7 +636,7 @@ func (s *Thing) ToEsDocuments() ([]Document, error) {
 		}
 		for _, AssociatedThingWithCascadeDeleteDoc := range AssociatedThingWithCascadeDeleteDocs {
 			for _, metadata := range AssociatedThingWithCascadeDeleteDoc.Metadata {
-				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThingWithCascadeDelete%s", *metadata.Key))
+				metadata.Key = lo.ToPtr(fmt.Sprintf("associatedThingWithCascadeDelete%s%s", ".", *metadata.Key))
 				doc.Metadata = append(doc.Metadata, metadata)
 			}
 		}
@@ -764,7 +764,7 @@ func (s *Thing2) ToEsDocuments() ([]Document, error) {
 	if s.Id != nil {
 
 		IdMetaData := Metadata{
-			Key: lo.ToPtr("Id"),
+			Key: lo.ToPtr("id"),
 
 			StringValue:  lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
 			KeywordValue: lo.ToPtr(fmt.Sprintf("%v", lo.FromPtr(s.Id))),
@@ -775,7 +775,7 @@ func (s *Thing2) ToEsDocuments() ([]Document, error) {
 	}
 
 	NameMetaData := Metadata{
-		Key: lo.ToPtr("Name"),
+		Key: lo.ToPtr("name"),
 
 		StringValue:  lo.ToPtr(fmt.Sprintf("%v", s.Name)),
 		KeywordValue: lo.ToPtr(fmt.Sprintf("%v", s.Name)),
@@ -859,7 +859,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 	var handled int
 	var searchAfter []interface{}
 
-	query := getKeywordQuery(ThingEsType, "AssociatedThingId", *s.Id)
+	query := getKeywordQuery(ThingEsType, "associatedThing.id", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
 		if err != nil {
@@ -877,7 +877,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 			}
 			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
-				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThing%s", *metadata.Key))
+				metadata.Key = lo.ToPtr(fmt.Sprintf("associatedThing%s%s", ".", *metadata.Key))
 				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
 					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
 						*doc.Metadata[i].StringValue != *metadata.StringValue {
@@ -918,7 +918,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 	handled = 0
 	searchAfter = nil
 
-	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	query = getKeywordQuery(ThingEsType, "associatedThingWithCascadeDelete.id", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
 		if err != nil {
@@ -936,7 +936,7 @@ func (s *Thing2) ReindexRelatedDocumentsBulk(ctx context.Context, onSuccess func
 			}
 			var hasChanged bool
 			for _, metadata := range nestedDoc.Metadata {
-				metadata.Key = lo.ToPtr(fmt.Sprintf("AssociatedThingWithCascadeDelete%s", *metadata.Key))
+				metadata.Key = lo.ToPtr(fmt.Sprintf("associatedThingWithCascadeDelete%s%s", ".", *metadata.Key))
 				if i, ok := metadataIndexByKey[*metadata.Key]; ok {
 					if doc.Metadata[i].StringValue != nil && metadata.StringValue != nil &&
 						*doc.Metadata[i].StringValue != *metadata.StringValue {
@@ -1000,7 +1000,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 	var handled int
 	var searchAfter []interface{}
 
-	query := getKeywordQuery(ThingEsType, "AssociatedThingId", *s.Id)
+	query := getKeywordQuery(ThingEsType, "associatedThing.id", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
 		if err != nil {
@@ -1014,7 +1014,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 			doc := hit.Source
 			newMetadata := []Metadata{}
 			for i := range doc.Metadata {
-				if !strings.HasPrefix(*doc.Metadata[i].Key, "AssociatedThing") {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "associatedThing") {
 					newMetadata = append(newMetadata, doc.Metadata[i])
 				}
 			}
@@ -1048,7 +1048,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 	handled = 0
 	searchAfter = nil
 
-	query = getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	query = getKeywordQuery(ThingEsType, "associatedThingWithCascadeDelete.id", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
 		if err != nil {
@@ -1062,7 +1062,7 @@ func (s *Thing2) ReindexRelatedDocumentsAfterDeleteBulk(ctx context.Context, onS
 			doc := hit.Source
 			newMetadata := []Metadata{}
 			for i := range doc.Metadata {
-				if !strings.HasPrefix(*doc.Metadata[i].Key, "AssociatedThingWithCascadeDelete") {
+				if !strings.HasPrefix(*doc.Metadata[i].Key, "associatedThingWithCascadeDelete") {
 					newMetadata = append(newMetadata, doc.Metadata[i])
 				}
 			}
@@ -1119,7 +1119,7 @@ func (s *Thing2) DeleteRelatedDocumentsBulk(ctx context.Context, onSuccess func(
 	var handled int
 	var searchAfter []interface{}
 
-	query := getKeywordQuery(ThingEsType, "AssociatedThingWithCascadeDeleteId", *s.Id)
+	query := getKeywordQuery(ThingEsType, "associatedThingWithCascadeDelete.id", *s.Id)
 	for {
 		res, err := executeSearch(ctx, query, size, searchAfter)
 		if err != nil {

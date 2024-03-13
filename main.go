@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,9 @@ import (
 )
 
 func main() {
+	var flags flag.FlagSet
+	plugin.NestedFieldSeparator = flags.String("nestedFieldSeparator", "", "separator to use for nested field names")
+	plugin.LowerCamelCaseFieldNames = flags.Bool("lowerCamelCaseFieldNames", false, "when true, nested field names are formatted using lowerCamelCase ")
 	input, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		panic(err)
@@ -23,7 +27,9 @@ func main() {
 		panic(err)
 	}
 
-	opts := protogen.Options{}
+	opts := protogen.Options{
+		ParamFunc: flags.Set,
+	}
 
 	builder, err := plugin.New(opts, &request)
 	if err != nil {
