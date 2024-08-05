@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package elasticsearch;
 
-option go_package = "github.com/catalystsquad/protoc-gen-go-elasticsearch/options;elasticsearch";
+option go_package = "github.com/catalystcommunity/protoc-gen-go-elasticsearch/options;elasticsearch";
 
 import "google/protobuf/descriptor.proto";
 

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/catalystsquad/protoc-gen-go-elasticsearch/plugin"
+	"github.com/catalystcommunity/protoc-gen-go-elasticsearch/plugin"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"

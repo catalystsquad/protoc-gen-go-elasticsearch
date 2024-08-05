@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/catalystsquad/app-utils-go/errorutils"
-	example_example "github.com/catalystsquad/protoc-gen-go-elasticsearch/example"
+	"github.com/catalystcommunity/app-utils-go/errorutils"
+	example_example "github.com/catalystcommunity/protoc-gen-go-elasticsearch/example"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/orlangure/gnomock"

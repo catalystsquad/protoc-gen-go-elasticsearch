@@ -3,7 +3,7 @@ package plugin
 import (
 	"bytes"
 	"fmt"
-	elasticsearch "github.com/catalystsquad/protoc-gen-go-elasticsearch/options"
+	elasticsearch "github.com/catalystcommunity/protoc-gen-go-elasticsearch/options"
 	"github.com/iancoleman/strcase"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -140,9 +140,9 @@ func writeGlobalImports(f *protogen.GeneratedFile) {
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esapi"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/joomcode/errorx"})
-	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/errorutils"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystcommunity/app-utils-go/errorutils"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/sirupsen/logrus"})
-	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystsquad/app-utils-go/logging"})
+	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/catalystcommunity/app-utils-go/logging"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/esutil"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "github.com/elastic/go-elasticsearch/v8/typedapi/types"})
 	f.QualifiedGoIdent(protogen.GoIdent{GoImportPath: "encoding/json"})

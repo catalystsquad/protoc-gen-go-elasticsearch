@@ -1,6 +1,6 @@
 # https://docs.buf.build/lint-usage/
 version: v1
-name: github.com/catalystsquad/protoc-gen-go-elasticsearch
+name: github.com/catalystcommunity/protoc-gen-go-elasticsearch
 lint:
   use:
     - DEFAULT

@@ -1,4 +1,4 @@
-module github.com/catalystsquad/protoc-gen-go-elasticsearch
+module github.com/catalystcommunity/protoc-gen-go-elasticsearch
 
 go 1.21
 
@@ -6,7 +6,7 @@ toolchain go1.21.1
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.23.2
-	github.com/catalystsquad/app-utils-go v1.0.7
+	github.com/catalystcommunity/app-utils-go v1.0.7
 	github.com/elastic/go-elasticsearch/v8 v8.9.0
 	github.com/iancoleman/strcase v0.3.0
 	github.com/joomcode/errorx v1.1.0
